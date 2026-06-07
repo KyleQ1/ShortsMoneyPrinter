@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Secrets / config
+.env
+config.toml
+
+# Runtime data
+storage/
+runs/
+*.mp4
+*.srt
+*.wav
+
+# Frontend
+web/node_modules/
+web/dist/
+web/tsconfig.tsbuildinfo
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

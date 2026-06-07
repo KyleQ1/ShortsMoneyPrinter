@@ -1,0 +1,17 @@
+Business Source License 1.1 (BSL) — PLACEHOLDER, REVIEW WITH COUNSEL BEFORE LAUNCH
+
+Licensor:             (your entity)
+Licensed Work:        OmegaMoneyPrinter (the contents of this repository)
+Additional Use Grant: You may use, modify, and self-host the Licensed Work for any
+                      purpose, including commercial content creation, EXCEPT offering
+                      it to third parties as a hosted/managed multi-tenant service that
+                      competes with the Licensor's hosted offering (LASocial).
+Change Date:          (e.g. four years from each release)
+Change License:       Apache License, Version 2.0
+
+On the Change Date, the Licensed Work converts to the Change License.
+
+This is a source-available license chosen so the project can collect GitHub stars and
+self-host users while reserving the hosted commercial service. It is a starting point,
+NOT legal advice — confirm the exact BSL terms and parameters with a lawyer before
+publishing. Full BSL 1.1 text: https://mariadb.com/bsl11/
