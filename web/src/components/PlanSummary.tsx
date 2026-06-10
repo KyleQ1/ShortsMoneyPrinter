@@ -32,7 +32,7 @@ export function PlanSummary({ plan, maxCost, planning, activityLabel }: PlanSumm
 
 function EmptyPlan() {
   const steps = [
-    ["1", "Choose the exact model", "API-key models use Replicate. Local uses your Wan command."],
+    ["1", "Choose the exact model", "Cloud modes use your Replicate key. Local uses your Wan command."],
     ["2", "Click Plan", "Creates the timeline, prompts, and cost estimate without provider calls."],
     ["3", "Click Run", "Starts live generation only after the estimate is under your max cost."],
   ];

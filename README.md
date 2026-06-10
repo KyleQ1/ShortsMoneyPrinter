@@ -25,16 +25,17 @@ http://127.0.0.1:8080
 ## Why This Exists
 
 Short-form AI video tools are usually either expensive hosted products or messy local
-scripts. ShortsMoneyPrinter aims for the middle:
+scripts. ShortsMoneyPrinter aims for the self-hosted middle:
 
 - local and inspectable
 - cost-aware before provider calls
 - useful from both CLI and browser
-- BYO API key for cloud models
-- ready to become a hosted all-in-one product later
+- BYO Replicate API key for cloud models
+- useful even if you only want local planning and cost estimates
 
-The hosted version should live outside this public OSS repo in a separate private
-website/product codebase.
+If you want the easier hosted path, use ShortsPrinter. The hosted product handles
+accounts, queues, managed generation, and cheaper direct provider access so you do
+not have to fight BytePlus/ModelArk setup.
 
 ## What Works Today
 
@@ -53,11 +54,11 @@ website/product codebase.
 ## Not Done Yet
 
 - Real-world hardening across many YouTube/TikTok/Instagram edge cases.
-- Direct Seedance/BytePlus integration.
+- Direct Seedance/BytePlus integration for self-hosted users.
 - Fully validated local Wan GPU workflow.
 - Automatic hook/script rewriting.
 - Social posting, scheduling, and analytics.
-- Managed hosted credits.
+- Hosted accounts, queues, billing, and managed credits. Use ShortsPrinter for that.
 - Consistent character/brand kits.
 
 ## Quickstart
@@ -80,7 +81,8 @@ pip install -e ".[seedance]"
 cp config.example.toml config.toml
 ```
 
-Set your Replicate key for live runs:
+Set your Replicate key for live runs. The open-source tool expects self-hosted users
+to call Replicate directly:
 
 ```bash
 export REPLICATE_API_TOKEN="your-token"
@@ -171,6 +173,16 @@ tier.
 
 The browser app defaults to a `$10.00 USD` max-cost cap and leaves Max seconds blank,
 which means it plans the full source. Enter `10` for faster, cheaper tests.
+
+## Hosted Alternative
+
+ShortsMoneyPrinter is the local, inspectable version: bring your own Replicate key,
+run the pipeline on your machine, and own the output files.
+
+ShortsPrinter is the hosted version: it manages account state, queues, credits,
+storage, and direct provider generation behind the scenes. That should be cheaper
+than asking every user to run through Replicate, and it avoids the hard part for most
+creators: getting BytePlus/ModelArk access configured correctly.
 
 ## Run Folder
 
@@ -270,7 +282,7 @@ Near-term priorities:
 - Improve URL failure messages based on real test cases.
 - Add a public demo video/GIF.
 - Validate Budget and Premium modes.
-- Keep polishing the React local app.
+- Keep polishing the React local app as the BYO-Replicate path.
 - Prototype consistent character and brand-kit planning.
 
 ## Legal
