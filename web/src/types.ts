@@ -1,4 +1,6 @@
 export type Quality = "budget" | "standard" | "premium" | "local";
+export type Language = "auto" | "en" | "zh" | "hi" | "es" | "fr" | "de" | "ja" | "ko" | "pt";
+export type AudioMode = "source" | "tts" | "none";
 export type RunStatus = "planned" | "running" | "done" | "failed";
 export type BlockStatus = "planned" | "generating" | "done" | "failed" | "skipped";
 
@@ -12,6 +14,11 @@ export type RemixRequest = {
   source: string;
   style: string;
   prompt: string | null;
+  video_subject_prompt: string | null;
+  video_script_prompt: string | null;
+  language: Language;
+  audio_mode: AudioMode;
+  tts_voice: string | null;
   quality: Quality;
   max_cost: number;
   captions: boolean;
@@ -47,6 +54,11 @@ export type RunPlan = {
   run_dir: string;
   style: string;
   user_prompt: string | null;
+  video_subject_prompt: string | null;
+  video_script_prompt: string | null;
+  language: Language;
+  audio_mode: AudioMode;
+  tts_voice: string | null;
   quality: Quality;
   provider: string;
   model_id: string;

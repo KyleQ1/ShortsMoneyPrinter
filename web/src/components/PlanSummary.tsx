@@ -32,7 +32,7 @@ export function PlanSummary({ plan, maxCost, planning, activityLabel }: PlanSumm
 
 function EmptyPlan() {
   const steps = [
-    ["1", "Choose the exact model", "Cloud modes use your Replicate key. Local uses your Wan command."],
+    ["1", "Start with local Wan", "Local mode uses your Wan command. Switch to Replicate if you want direct cloud generation."],
     ["2", "Click Plan", "Creates the timeline, prompts, and cost estimate without provider calls."],
     ["3", "Click Run", "Starts live generation only after the estimate is under your max cost."],
   ];
@@ -81,12 +81,13 @@ function PlanDetails({ plan, maxCost }: { plan: RunPlan; maxCost: number }) {
           <Fact label="Source" value={sourceName} title={sourceName} />
           <Fact label="Model" value={plan.model_label} />
           <Fact label="Generation" value={`${plan.resolution} · ${plan.mode}`} />
-          <Fact label="Source Audio" value={plan.has_audio ? "Detected" : "None"} />
+          <Fact label="Audio" value={plan.audio_mode === "tts" ? "TTS" : plan.audio_mode === "source" ? (plan.has_audio ? "Original" : "None") : "None"} />
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
         <StatusPill>Platform: {plan.source_platform || "local"}</StatusPill>
+        <StatusPill>Language: {plan.language}</StatusPill>
         <StatusPill>Original: {formatSeconds(plan.original_duration || plan.duration)}</StatusPill>
         <StatusPill>Aspect: {plan.aspect_ratio || `${plan.width}x${plan.height}`}</StatusPill>
         <StatusPill tone={costTone}>Max cost: {maxCost > 0 ? money(maxCost) : "not set"}</StatusPill>

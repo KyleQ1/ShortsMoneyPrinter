@@ -14,15 +14,44 @@ const defaultForm: RunFormState = {
   source: "",
   style: "nursery-3d",
   prompt: "",
-  quality: "standard",
+  videoSubjectPrompt: "",
+  videoScriptPrompt: "",
+  language: "auto",
+  audioMode: "source",
+  ttsVoice: "",
+  quality: "local",
   maxCost: "$10.00 USD",
   maxSeconds: "",
   captions: false,
   wanCommand: "",
 };
 
+const savedSettingsKey = "shorts_money_printer_run_settings";
+
+function loadSavedForm(): RunFormState {
+  try {
+    const raw = localStorage.getItem(savedSettingsKey);
+    if (!raw) return defaultForm;
+    const saved = JSON.parse(raw) as Partial<RunFormState>;
+    return {
+      ...defaultForm,
+      style: saved.style || defaultForm.style,
+      language: saved.language || defaultForm.language,
+      audioMode: saved.audioMode || defaultForm.audioMode,
+      ttsVoice: saved.ttsVoice || defaultForm.ttsVoice,
+      quality: saved.quality || defaultForm.quality,
+      maxCost: saved.maxCost || defaultForm.maxCost,
+      maxSeconds: saved.maxSeconds || defaultForm.maxSeconds,
+      captions: saved.captions ?? defaultForm.captions,
+      wanCommand: saved.wanCommand || defaultForm.wanCommand,
+    };
+  } catch {
+    return defaultForm;
+  }
+}
+
 export default function App() {
-  const [form, setForm] = useState(defaultForm);
+  const [form, setForm] = useState(loadSavedForm);
   const [styles, setStyles] = useState<StyleOption[]>([]);
   const [preflight, setPreflight] = useState<PreflightStatus | null>(null);
   const [runs, setRuns] = useState<RunPlan[]>([]);
@@ -75,7 +104,20 @@ export default function App() {
       void makePlan(false);
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [form.source, form.style, form.prompt, form.quality, form.maxSeconds, form.captions, form.wanCommand]);
+  }, [
+    form.source,
+    form.style,
+    form.prompt,
+    form.videoSubjectPrompt,
+    form.videoScriptPrompt,
+    form.language,
+    form.audioMode,
+    form.ttsVoice,
+    form.quality,
+    form.maxSeconds,
+    form.captions,
+    form.wanCommand,
+  ]);
 
   function validateInputs(manual: boolean): boolean {
     if (!form.source.trim()) {
@@ -88,6 +130,10 @@ export default function App() {
     setSourceInvalid(false);
     if (form.maxSeconds && Number(form.maxSeconds) <= 0) {
       if (manual) log("Max seconds must be greater than 0, or blank for the full source.");
+      return false;
+    }
+    if (form.audioMode === "tts" && !form.videoScriptPrompt.trim()) {
+      if (manual) log("TTS audio needs a video script prompt.");
       return false;
     }
     return true;
@@ -192,7 +238,22 @@ export default function App() {
   }
 
   function updateForm(next: RunFormState) {
-    setForm(next.quality === "local" ? next : { ...next, wanCommand: "" });
+    const cleaned = next.quality === "local" ? next : { ...next, wanCommand: "" };
+    setForm(cleaned);
+    localStorage.setItem(
+      savedSettingsKey,
+      JSON.stringify({
+        style: cleaned.style,
+        language: cleaned.language,
+        audioMode: cleaned.audioMode,
+        ttsVoice: cleaned.ttsVoice,
+        quality: cleaned.quality,
+        maxCost: cleaned.maxCost,
+        maxSeconds: cleaned.maxSeconds,
+        captions: cleaned.captions,
+        wanCommand: cleaned.wanCommand,
+      }),
+    );
     if (next.source.trim()) setSourceInvalid(false);
   }
 

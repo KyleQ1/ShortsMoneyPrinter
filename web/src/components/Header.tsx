@@ -8,10 +8,10 @@ export function Header() {
           <Logo />
           <div>
             <h1 className="text-base font-extrabold leading-tight text-ink">ShortsMoneyPrinter</h1>
-            <p className="text-xs text-muted">Local remix planner and Seedance runner</p>
+            <p className="text-xs text-muted">Local Wan remix planner with optional cloud models</p>
           </div>
         </div>
-        <span className="pill">OSS local app</span>
+        <span className="pill">Local first</span>
       </div>
     </header>
   );

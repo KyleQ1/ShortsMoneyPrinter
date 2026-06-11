@@ -28,3 +28,4 @@ web/tsconfig.tsbuildinfo
 .DS_Store
 .idea/
 .vscode/
+.claude/

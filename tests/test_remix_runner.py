@@ -97,6 +97,19 @@ def test_prompt_generation_is_deterministic():
     custom = generate_prompt(0, 0.0, 3.25, "nursery-3d", "make it playful")
     assert "User direction: make it playful" in custom
 
+    directed = generate_prompt(
+        0,
+        0.0,
+        3.25,
+        "nursery-3d",
+        subject_prompt="money facts for teenagers",
+        script_prompt="fast Hindi narration",
+        language="hi",
+    )
+    assert "Target language" in directed
+    assert "Video subject: money facts for teenagers" in directed
+    assert "Script/narration direction: fast Hindi narration" in directed
+
 
 def test_dry_run_writes_plan_and_never_calls_provider(tmp_path):
     source = _tiny_mp4(tmp_path / "source.mp4")
@@ -110,12 +123,14 @@ def test_dry_run_writes_plan_and_never_calls_provider(tmp_path):
     assert saved.user_prompt == "use toy-like characters"
     assert saved.source_platform == "local"
     assert saved.source_title == "source.mp4"
+    assert saved.quality == "local"
+    assert saved.audio_mode == "source"
     assert saved.original_duration > 0
     assert saved.aspect_ratio == "9:16"
     assert saved.block_count == 1
     assert Path(saved.blocks[0].ref_video).exists()
     assert Path(saved.blocks[0].keyframe).exists()
-    assert saved.blocks[0].estimated_cost > 0
+    assert saved.blocks[0].estimated_cost == 0
     assert "use toy-like characters" in saved.blocks[0].prompt
     assert not Path(saved.blocks[0].generated_path).exists()
 
@@ -133,7 +148,10 @@ def test_plan_missing_local_file_has_actionable_error(tmp_path):
 
 def test_live_requires_max_cost_and_enforces_estimate_before_provider(tmp_path):
     source = _tiny_mp4(tmp_path / "source.mp4")
-    plan = create_plan(RemixRequest(source=str(source), max_total_seconds=1), runs_dir=tmp_path / "runs")
+    plan = create_plan(
+        RemixRequest(source=str(source), quality="standard", max_total_seconds=1),
+        runs_dir=tmp_path / "runs",
+    )
 
     with pytest.raises(ValueError, match="max_cost is required"):
         run_live(plan.run_id, None, provider=FailingProvider(), runs_dir=tmp_path / "runs")
@@ -158,6 +176,42 @@ def test_local_live_requires_wan_command_without_gpu_probe(tmp_path):
     assert failed.status == "failed"
     assert failed.error is not None
     assert "Wan command" in failed.error
+
+
+def test_tts_audio_mode_requires_script_and_sets_audio_path(tmp_path, monkeypatch):
+    source = _tiny_mp4(tmp_path / "source.mp4")
+
+    with pytest.raises(RuntimeError, match="TTS audio requires"):
+        create_plan(
+            RemixRequest(source=str(source), audio_mode="tts", max_total_seconds=1),
+            runs_dir=tmp_path / "runs-missing-script",
+        )
+
+    def fake_synthesize(script: str, voice: str | None, out_path: str) -> str:
+        Path(out_path).write_bytes(b"fake audio")
+        assert script == "Narrate this in Hindi."
+        assert voice == "hi-IN-SwaraNeural"
+        return out_path
+
+    monkeypatch.setattr("app.services.tts.synthesize", fake_synthesize)
+    plan = create_plan(
+        RemixRequest(
+            source=str(source),
+            audio_mode="tts",
+            video_script_prompt="Narrate this in Hindi.",
+            language="hi",
+            tts_voice="hi-IN-SwaraNeural",
+            max_total_seconds=1,
+        ),
+        runs_dir=tmp_path / "runs",
+    )
+
+    assert plan.audio_mode == "tts"
+    assert plan.language == "hi"
+    assert plan.video_script_prompt == "Narrate this in Hindi."
+    assert plan.tts_voice == "hi-IN-SwaraNeural"
+    assert plan.audio_path is not None
+    assert Path(plan.audio_path).exists()
 
 
 def test_mocked_live_run_stitches_playable_final_and_resume_skips(tmp_path):
@@ -260,4 +314,3 @@ def test_api_plan_start_status_and_final_download(tmp_path, monkeypatch):
     final = client.get(f"/api/runs/{run_id}/final.mp4")
     assert final.status_code == 200
     assert final.headers["content-type"].startswith("video/mp4")
-

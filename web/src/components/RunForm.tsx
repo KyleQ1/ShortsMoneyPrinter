@@ -1,12 +1,17 @@
 import type { FormEvent } from "react";
 import { modelInfo } from "../modelInfo";
-import type { Quality, RemixRequest, StyleOption } from "../types";
+import type { AudioMode, Language, Quality, RemixRequest, StyleOption } from "../types";
 import { classNames, parseUsd } from "../lib";
 
 export type RunFormState = {
   source: string;
   style: string;
   prompt: string;
+  videoSubjectPrompt: string;
+  videoScriptPrompt: string;
+  language: Language;
+  audioMode: AudioMode;
+  ttsVoice: string;
   quality: Quality;
   maxCost: string;
   maxSeconds: string;
@@ -30,6 +35,11 @@ export function toRequest(state: RunFormState): RemixRequest {
     source: state.source.trim(),
     style: state.style,
     prompt: state.prompt.trim() || null,
+    video_subject_prompt: state.videoSubjectPrompt.trim() || null,
+    video_script_prompt: state.videoScriptPrompt.trim() || null,
+    language: state.language,
+    audio_mode: state.audioMode,
+    tts_voice: state.ttsVoice.trim() || null,
     quality: state.quality,
     max_cost: parseUsd(state.maxCost),
     captions: state.captions,
@@ -43,6 +53,11 @@ export function requestFingerprint(body: RemixRequest): string {
     source: body.source,
     style: body.style,
     prompt: body.prompt,
+    video_subject_prompt: body.video_subject_prompt,
+    video_script_prompt: body.video_script_prompt,
+    language: body.language,
+    audio_mode: body.audio_mode,
+    tts_voice: body.tts_voice,
     quality: body.quality,
     captions: body.captions,
     max_total_seconds: body.max_total_seconds,
@@ -104,8 +119,34 @@ export function RunForm({
         </div>
 
         <div>
+          <label className="label" htmlFor="videoSubjectPrompt">
+            Video subject prompt <span className="font-normal text-muted">(optional)</span>
+          </label>
+          <textarea
+            id="videoSubjectPrompt"
+            className="field min-h-20 resize-y"
+            value={state.videoSubjectPrompt}
+            onChange={(event) => update("videoSubjectPrompt", event.target.value)}
+            placeholder="Optional niche or subject, e.g. satisfying finance facts for Shorts."
+          />
+        </div>
+
+        <div>
+          <label className="label" htmlFor="videoScriptPrompt">
+            Video script prompt <span className="font-normal text-muted">(optional)</span>
+          </label>
+          <textarea
+            id="videoScriptPrompt"
+            className="field min-h-24 resize-y"
+            value={state.videoScriptPrompt}
+            onChange={(event) => update("videoScriptPrompt", event.target.value)}
+            placeholder="Optional narration/script direction. Required only if Audio is set to TTS."
+          />
+        </div>
+
+        <div>
           <label className="label" htmlFor="prompt">
-            Prompt <span className="font-normal text-muted">(optional)</span>
+            Visual prompt <span className="font-normal text-muted">(optional)</span>
           </label>
           <textarea
             id="prompt"
@@ -115,6 +156,52 @@ export function RunForm({
             placeholder="Optional direction, e.g. make it playful, keep the same beat, use toy-like characters."
           />
         </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="language">
+              Language
+            </label>
+            <select id="language" className="field" value={state.language} onChange={(event) => update("language", event.target.value as Language)}>
+              <option value="auto">Auto detect</option>
+              <option value="en">English</option>
+              <option value="zh">Chinese</option>
+              <option value="hi">Hindi</option>
+              <option value="es">Spanish</option>
+              <option value="fr">French</option>
+              <option value="de">German</option>
+              <option value="ja">Japanese</option>
+              <option value="ko">Korean</option>
+              <option value="pt">Portuguese</option>
+            </select>
+          </div>
+          <div>
+            <label className="label" htmlFor="audioMode">
+              Audio
+            </label>
+            <select id="audioMode" className="field" value={state.audioMode} onChange={(event) => update("audioMode", event.target.value as AudioMode)}>
+              <option value="source">Use original video audio</option>
+              <option value="tts">Generate TTS from script</option>
+              <option value="none">No audio</option>
+            </select>
+          </div>
+        </div>
+
+        {state.audioMode === "tts" ? (
+          <div>
+            <label className="label" htmlFor="ttsVoice">
+              TTS voice
+            </label>
+            <input
+              id="ttsVoice"
+              className="field"
+              value={state.ttsVoice}
+              onChange={(event) => update("ttsVoice", event.target.value)}
+              placeholder="en-US-AriaNeural"
+            />
+            <p className="hint">Uses Edge TTS by default. MoneyPrinterTurbo-style Azure TTS V1 naming can be added later.</p>
+          </div>
+        ) : null}
 
         <div>
           <label className="label" htmlFor="quality">
@@ -126,10 +213,10 @@ export function RunForm({
             value={state.quality}
             onChange={(event) => update("quality", event.target.value as Quality)}
           >
+            <option value="local">Local - Wan 2.2 TI2V-5B</option>
             <option value="budget">API key - Replicate Seedance 1.5 Pro</option>
             <option value="standard">API key - Replicate Seedance 2.0 Fast</option>
             <option value="premium">API key - Replicate Seedance 2.0</option>
-            <option value="local">Local - Wan 2.2 TI2V-5B</option>
           </select>
           <div className="mt-2 rounded-md border border-line bg-teal-50/60 p-3">
             <b className="block text-sm text-ink">{model.title}</b>
@@ -181,9 +268,9 @@ export function RunForm({
               className="field"
               value={state.wanCommand}
               onChange={(event) => update("wanCommand", event.target.value)}
-              placeholder="optional for local mode"
+              placeholder="python run_wan.py --input {input} --prompt {prompt} --output {output}"
             />
-            <p className="hint">Can include {"{input}"}, {"{keyframe}"}, {"{prompt}"}, {"{output}"}, and {"{index}"} placeholders.</p>
+            <p className="hint">Required for local Run. Can include {"{input}"}, {"{keyframe}"}, {"{prompt}"}, {"{output}"}, and {"{index}"} placeholders.</p>
           </div>
         ) : null}
 

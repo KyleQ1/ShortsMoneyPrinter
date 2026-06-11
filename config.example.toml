@@ -15,7 +15,8 @@ base_url = ""              # e.g. http://localhost:11434/v1 for Ollama
 model    = "gpt-4o-mini"
 
 [video_gen]
-# AI video generation for remix blocks. BYO Replicate key for live cloud runs.
+# Optional cloud video generation for remix blocks. Local Wan is selected in the app/CLI;
+# use Replicate here only when you switch to a cloud Seedance model.
 # provider: none | seedance
 provider        = "seedance"
 api_key         = ""
@@ -28,6 +29,7 @@ pexels_api_key  = ""
 pixabay_api_key = ""
 
 [tts]
+# Used when the run audio mode is "tts". Source audio is still the default.
 # provider: edge | azure | elevenlabs
 provider = "edge"          # edge-tts is free, no key
 api_key  = ""

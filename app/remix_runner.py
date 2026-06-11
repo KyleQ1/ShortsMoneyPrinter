@@ -28,6 +28,8 @@ from app.models import AspectRatio
 from app.services import styles, video_conditioning as vc
 
 Quality = Literal["budget", "standard", "premium", "local"]
+Language = Literal["auto", "en", "zh", "hi", "es", "fr", "de", "ja", "ko", "pt"]
+AudioMode = Literal["source", "tts", "none"]
 BlockStatus = Literal["planned", "generating", "done", "failed", "skipped"]
 RunStatus = Literal["planned", "running", "done", "failed"]
 
@@ -108,7 +110,12 @@ class RemixRequest(BaseModel):
     source: str
     style: str = styles.DEFAULT_STYLE
     prompt: str | None = None
-    quality: Quality = "standard"
+    video_subject_prompt: str | None = None
+    video_script_prompt: str | None = None
+    language: Language = "auto"
+    audio_mode: AudioMode = "source"
+    tts_voice: str | None = None
+    quality: Quality = "local"
     max_cost: float | None = None
     captions: bool = False
     max_total_seconds: float | None = None
@@ -150,6 +157,11 @@ class RunPlan(BaseModel):
     run_dir: str
     style: str
     user_prompt: str | None = None
+    video_subject_prompt: str | None = None
+    video_script_prompt: str | None = None
+    language: Language = "auto"
+    audio_mode: AudioMode = "source"
+    tts_voice: str | None = None
     quality: Quality
     provider: str
     model_id: str
@@ -285,15 +297,16 @@ def create_plan(request: RemixRequest, runs_dir: Path = RUNS_DIR) -> RunPlan:
     metadata.aspect_ratio = _aspect_label(width, height)
 
     has_audio = _has_audio(source_path)
-    audio_path = str(audio_dir / "source.m4a") if has_audio else None
-    if has_audio and audio_path:
+    source_audio_path = str(audio_dir / "source.m4a") if has_audio else None
+    if has_audio and source_audio_path:
         try:
-            _extract_audio(source_path, audio_path, duration)
+            _extract_audio(source_path, source_audio_path, duration)
         except CommandError as exc:
             raise UserFacingError(
                 "Could not extract source audio. Try another video, or rerun with a shorter "
                 "max seconds value."
             ) from exc
+    audio_path = _prepare_audio(request, audio_dir, source_audio_path)
 
     segment_plan = _plan_blocks(source_path, duration)
     block_models: list[BlockPlan] = []
@@ -311,7 +324,16 @@ def create_plan(request: RemixRequest, runs_dir: Path = RUNS_DIR) -> RunPlan:
                 "Could not prepare a remix block from the source video. Try a shorter max "
                 "seconds value or a different MP4/MOV source."
             ) from exc
-        prompt = generate_prompt(index, start, end, request.style, request.prompt)
+        prompt = generate_prompt(
+            index,
+            start,
+            end,
+            request.style,
+            request.prompt,
+            request.video_subject_prompt,
+            request.video_script_prompt,
+            request.language,
+        )
         Path(prompt_path).write_text(prompt + "\n", encoding="utf-8")
         block_models.append(
             BlockPlan(
@@ -341,6 +363,11 @@ def create_plan(request: RemixRequest, runs_dir: Path = RUNS_DIR) -> RunPlan:
         run_dir=str(run_dir),
         style=request.style,
         user_prompt=request.prompt.strip() if request.prompt else None,
+        video_subject_prompt=request.video_subject_prompt.strip() if request.video_subject_prompt else None,
+        video_script_prompt=request.video_script_prompt.strip() if request.video_script_prompt else None,
+        language=request.language,
+        audio_mode=request.audio_mode,
+        tts_voice=request.tts_voice.strip() if request.tts_voice else None,
         quality=request.quality,
         provider=profile.provider,
         model_id=profile.model_id,
@@ -456,6 +483,9 @@ def generate_prompt(
     end: float,
     style: str,
     user_prompt: str | None = None,
+    subject_prompt: str | None = None,
+    script_prompt: str | None = None,
+    language: Language = "auto",
 ) -> str:
     """Deterministic prompt; no LLM key is required for the MVP."""
     base = (
@@ -464,9 +494,30 @@ def generate_prompt(
         f"{start:.2f}s to {end:.2f}s. Keep continuity with adjacent blocks. "
         "Do not add text overlays unless text is visible in the source."
     )
+    if language != "auto":
+        base = f"{base} Target language for any narration or visible text is {language}."
+    if subject_prompt and subject_prompt.strip():
+        base = f"{base} Video subject: {subject_prompt.strip()}"
+    if script_prompt and script_prompt.strip():
+        base = f"{base} Script/narration direction: {script_prompt.strip()}"
     if user_prompt and user_prompt.strip():
         base = f"{base} User direction: {user_prompt.strip()}"
     return styles.apply(base, style)
+
+
+def _prepare_audio(request: RemixRequest, audio_dir: Path, source_audio_path: str | None) -> str | None:
+    if request.audio_mode == "none":
+        return None
+    if request.audio_mode == "source":
+        return source_audio_path
+    if request.audio_mode == "tts":
+        if not request.video_script_prompt or not request.video_script_prompt.strip():
+            raise UserFacingError("TTS audio requires a video script prompt.")
+        from app.services import tts
+
+        tts_path = str(audio_dir / "tts.mp3")
+        return tts.synthesize(request.video_script_prompt, request.tts_voice, tts_path)
+    raise ValueError(f"unknown audio mode: {request.audio_mode}")
 
 
 def _new_run_id() -> str:

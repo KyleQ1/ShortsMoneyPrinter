@@ -1,6 +1,11 @@
 import type { ModelInfo, Quality } from "./types";
 
 export const modelInfo: Record<Quality, ModelInfo> = {
+  local: {
+    title: "Wan 2.2 TI2V-5B",
+    detail: "Default local model path. Runs through your own Wan command and keeps generation on your machine.",
+    cost: "$0 provider cost inside this app. Your local hardware, electricity, and setup time still apply.",
+  },
   budget: {
     title: "Replicate Seedance 1.5 Pro",
     detail:
@@ -18,10 +23,5 @@ export const modelInfo: Record<Quality, ModelInfo> = {
     detail:
       "BYO Replicate key required. 720p video-to-video. Highest cloud quality and most expensive option.",
     cost: "$0.22/sec using Replicate's video-input tier. Around $2.20 for 10s or $6.60 for 30s.",
-  },
-  local: {
-    title: "Wan 2.2 TI2V-5B",
-    detail: "Local command mode. No bundled weights or cloud calls. Requires your own GPU setup.",
-    cost: "$0 cloud cost inside this app. Your local hardware, electricity, and setup time still apply.",
   },
 };

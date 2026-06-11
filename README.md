@@ -14,8 +14,8 @@ Generate and remix short-form videos with AI from a URL or local MP4.
 
 Give ShortsMoneyPrinter a YouTube, TikTok, Instagram URL, or local video file. It
 downloads or copies the source, probes the media, splits it into model-sized blocks,
-writes prompts, estimates cost before spending credits, optionally calls Seedance
-through your Replicate key, preserves source audio, and exports a final MP4.
+writes prompts, estimates cost before spending credits, runs your local Wan command
+by default, preserves source audio, and exports a final MP4.
 
 ```bash
 smp run <url-or-local-video> --style nursery-3d --max-total-seconds 10
@@ -33,15 +33,15 @@ http://127.0.0.1:8080
 - Turn existing short videos into new AI-generated versions.
 - Plan a remix before spending provider credits.
 - Run from a browser UI, CLI, or local FastAPI API.
-- Use BYO Replicate for live Seedance generation.
+- Use local Wan generation by default.
+- Switch to BYO Replicate for direct cloud Seedance generation.
+- Add optional subject and script prompts.
+- Auto-detect language or target Chinese, Hindi, English, and more.
+- Keep original audio, generate TTS narration, or export silent video.
 - Preserve original source audio when possible.
 - Generate block prompts without needing an LLM key.
 - Resume runs by skipping completed generated blocks.
 - Export local MP4 files that you own.
-
-ShortsMoneyPrinter is the open-source, self-hosted path. If you want managed
-accounts, queues, credits, storage, and cheaper direct-provider generation without
-setting up BytePlus/ModelArk yourself, use the hosted product: ShortsPrinter.
 
 ## Features
 
@@ -54,14 +54,18 @@ setting up BytePlus/ModelArk yourself, use the hosted product: ShortsPrinter.
 | Reference clip, keyframe, and audio extraction | Works |
 | Deterministic prompt generation | Works |
 | Cost estimate before provider calls | Works |
-| Replicate Seedance live generation | Works |
+| Optional subject prompt | Works |
+| Optional script prompt | Works |
+| Language auto-detect / target language | Works |
+| Source audio, TTS, or no audio | Works |
+| Local Wan command generation | Default |
+| Replicate Seedance live generation | Optional |
 | Resume completed blocks | Works |
 | Concatenate generated blocks | Works |
 | Preserve/mux original audio | Works |
 | Optional burned-in captions | Works |
 | Browser UI | Works |
 | Local FastAPI API | Works |
-| Local Wan command mode | Experimental |
 | Direct BytePlus/ModelArk in OSS | Not included |
 | Social posting/scheduling | Hosted roadmap |
 
@@ -113,6 +117,17 @@ Dry run with no provider spend:
 smp run <url-or-local-video> --style nursery-3d --max-total-seconds 10
 ```
 
+Live generation with local Wan:
+
+```bash
+smp run <url-or-local-video> \
+  --style nursery-3d \
+  --max-total-seconds 10 \
+  --live \
+  --max-cost 10 \
+  --wan-command "python run_wan.py --input {input} --prompt {prompt} --output {output}"
+```
+
 Live generation with Replicate Seedance:
 
 ```bash
@@ -142,10 +157,11 @@ smp styles
 - Python 3.11+
 - ffmpeg and ffprobe on your PATH
 - Node 20+ only if you want to rebuild the React UI
-- Replicate API token only if you want live cloud generation
+- A Wan command for default local live generation
+- Replicate API token only if you want direct cloud generation
 
-GPU is not required for the default Replicate path. Local GPU only matters if you
-wire the experimental local Wan command mode.
+Replicate is optional. The default model selector is local Wan; if you change the
+browser app to a Replicate model, the app keeps that preference on this machine.
 
 ## Quick Start
 
@@ -166,9 +182,26 @@ On Windows, activate the virtual environment with:
 .\.venv\Scripts\activate
 ```
 
-### 2. Set Replicate Key For Live Runs
+### 2. Configure Local Wan For Live Runs
 
-The open-source tool expects self-hosted users to call Replicate directly:
+Plan mode works without a Wan command. Live local generation needs a command that
+writes the generated block to `{output}`. The command can use these placeholders:
+`{input}`, `{keyframe}`, `{prompt}`, `{output}`, and `{index}`.
+
+Example:
+
+```bash
+smp run ./source.mp4 \
+  --live \
+  --max-cost 10 \
+  --wan-command "python run_wan.py --input {input} --prompt {prompt} --output {output}"
+```
+
+### 3. Optional: Use Replicate Directly
+
+If you prefer cloud generation, choose a Replicate model in the app or pass
+`--quality standard`, `--quality budget`, or `--quality premium` in the CLI. Then set
+your Replicate key:
 
 ```bash
 export REPLICATE_API_TOKEN="your-token"
@@ -182,7 +215,7 @@ $env:REPLICATE_API_TOKEN="your-token"
 
 You can still plan runs without this key.
 
-### 3. Build The Web UI
+### 4. Build The Web UI
 
 ```bash
 cd web
@@ -191,7 +224,7 @@ npm run build
 cd ..
 ```
 
-### 4. Start The App
+### 5. Start The App
 
 ```bash
 smp serve
@@ -199,30 +232,33 @@ smp serve
 
 ## Model Modes
 
-Costs are estimates only. Check provider pricing before spending real money. These
-Replicate estimates use the public billing tiers available on June 5, 2026. For
-Seedance 2.0 modes, ShortsMoneyPrinter usually sends each source block as a reference
-video, so the estimate uses Replicate's `video_in` tier.
+Local Wan is the default. Replicate models are optional direct-cloud modes. Costs are
+estimates only; check provider pricing before spending real money. Replicate estimates
+use the public billing tiers available on June 5, 2026. For Seedance 2.0 modes,
+ShortsMoneyPrinter usually sends each source block as a reference video, so the
+estimate uses Replicate's `video_in` tier.
 
 | CLI value | Model | Input | Resolution | Estimate |
 |---|---|---|---|---|
+| `local` | External Wan command | local command | local | $0 cloud cost, uses your own setup |
 | `budget` | Replicate Seedance 1.5 Pro | keyframe image-to-video | 480p | $0.013/sec, around $0.13 for 10s |
 | `standard` | Replicate Seedance 2.0 Fast | video-to-video | 480p | $0.08/sec, around $0.80 for 10s |
 | `premium` | Replicate Seedance 2.0 | video-to-video | 720p | $0.22/sec, around $2.20 for 10s |
-| `local` | External Wan command | local command | local | $0 cloud cost, uses your own setup |
 
 The browser app defaults to a `$10.00 USD` max-cost cap and leaves Max seconds blank,
 which means it plans the full source. Enter `10` for faster, cheaper tests.
 
 ## Example Workflows
 
-### Recreate A Viral Clip In A Style
+### Recreate A Viral Clip With Local Wan
 
 ```bash
 smp run "https://example.com/short" \
   --style anime \
-  --quality standard \
-  --max-total-seconds 10
+  --max-total-seconds 10 \
+  --live \
+  --max-cost 10 \
+  --wan-command "python run_wan.py --input {input} --prompt {prompt} --output {output}"
 ```
 
 ### Add Custom Direction
@@ -230,6 +266,30 @@ smp run "https://example.com/short" \
 ```bash
 smp run ./source.mp4 \
   --prompt "make it colorful, toy-like, and optimized for Shorts" \
+  --max-total-seconds 10
+```
+
+### Use Replicate Directly
+
+```bash
+export REPLICATE_API_TOKEN="your-token"
+
+smp run ./source.mp4 \
+  --quality standard \
+  --live \
+  --max-cost 10 \
+  --max-total-seconds 10
+```
+
+### Generate TTS And Subtitles
+
+```bash
+smp run ./source.mp4 \
+  --audio-mode tts \
+  --video-script-prompt "Narrate this in Hindi with a fast hook." \
+  --language hi \
+  --tts-voice hi-IN-SwaraNeural \
+  --captions \
   --max-total-seconds 10
 ```
 

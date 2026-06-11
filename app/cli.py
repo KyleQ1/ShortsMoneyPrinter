@@ -165,6 +165,11 @@ def _run(args: argparse.Namespace) -> int:
         source=args.source,
         style=args.style,
         prompt=args.prompt,
+        video_subject_prompt=args.video_subject_prompt,
+        video_script_prompt=args.video_script_prompt,
+        language=args.language,
+        audio_mode=args.audio_mode,
+        tts_voice=args.tts_voice,
         quality=args.quality,
         max_cost=args.max_cost,
         captions=args.captions,
@@ -232,12 +237,27 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("source", help="URL or local video path")
     run.add_argument("--style", default="nursery-3d", help="style preset; run 'smp styles' to list")
     run.add_argument("--prompt", default=None, help="optional direction to add to generated block prompts")
+    run.add_argument("--video-subject-prompt", default=None, help="optional subject or niche direction")
+    run.add_argument("--video-script-prompt", default=None, help="optional narration/script direction")
+    run.add_argument(
+        "--language",
+        default="auto",
+        choices=["auto", "en", "zh", "hi", "es", "fr", "de", "ja", "ko", "pt"],
+        help="target language for narration/text; default auto-detect",
+    )
+    run.add_argument(
+        "--audio-mode",
+        default="source",
+        choices=["source", "tts", "none"],
+        help="source=use original video audio, tts=generate narration, none=silent video",
+    )
+    run.add_argument("--tts-voice", default=None, help="voice for --audio-mode tts, e.g. en-US-AriaNeural")
     run.add_argument(
         "--quality",
-        default="standard",
+        default="local",
         choices=["budget", "standard", "premium", "local"],
-        help="budget=Seedance 1.5 image-to-video, standard=Seedance 2.0 Fast, "
-        "premium=Seedance 2.0, local=Wan command",
+        help="local=Wan command, budget=Seedance 1.5 image-to-video, "
+        "standard=Seedance 2.0 Fast, premium=Seedance 2.0",
     )
     run.add_argument("--live", action="store_true", help="spend credits and generate video")
     run.add_argument("--max-cost", type=float, default=None, help="required for --live")
