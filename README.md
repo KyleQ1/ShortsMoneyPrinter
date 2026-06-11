@@ -356,12 +356,6 @@ smp serve --no-open
 - Prototype consistent character and brand-kit planning.
 - Keep hosted accounts, queues, billing, and managed direct-provider credits in ShortsPrinter.
 
-## Legal
+## Star History
 
-ShortsMoneyPrinter is a creator tool that produces a local file. You choose the source,
-you approve the output, and you decide where to publish it. You are responsible for
-having the rights to what you publish and for complying with each platform's terms.
-
-## License
-
-MIT. Use it, fork it, modify it, and ship with it.
+[![Star History Chart](https://api.star-history.com/svg?repos=KyleQ1/ShortsMoneyPrinter&type=Date)](https://www.star-history.com/#KyleQ1/ShortsMoneyPrinter&Date)
