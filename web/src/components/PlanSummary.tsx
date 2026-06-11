@@ -68,6 +68,12 @@ function PlanDetails({ plan, maxCost }: { plan: RunPlan; maxCost: number }) {
 
   return (
     <div className="mt-4 grid gap-4">
+      {plan.status === "failed" && plan.error ? (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3">
+          <b className="block text-sm text-danger">Run failed</b>
+          <p className="mt-1 text-xs text-danger">{plan.error}</p>
+        </div>
+      ) : null}
       <div className="grid overflow-hidden rounded-md border border-line bg-white md:grid-cols-[minmax(180px,0.85fr)_minmax(0,1.15fr)]">
         <div className="bg-accent p-5 text-white">
           <span className="text-xs font-bold uppercase tracking-normal opacity-85">Estimated Cost</span>

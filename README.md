@@ -28,6 +28,28 @@ Open the local app:
 http://127.0.0.1:8080
 ```
 
+## Demo
+
+<!--
+DEMO ASSETS — fill after the first validated live run:
+- docs/demo.gif        : end-to-end remix (paste URL -> plan -> run -> final MP4)
+- docs/before-after.png: source clip frame beside the AI-generated frame
+- docs/ui.png          : the browser app showing a plan + cost estimate
+Then uncomment the block below.
+
+<div align="center">
+
+![ShortsMoneyPrinter demo](docs/demo.gif)
+
+| Source | AI remix |
+|---|---|
+| ![source](docs/before.png) | ![after](docs/after.png) |
+
+</div>
+-->
+
+_Demo video and before/after screenshots land here after the first validated live run._
+
 ## What It Does
 
 - Turn existing short videos into new AI-generated versions.
@@ -59,7 +81,7 @@ http://127.0.0.1:8080
 | Language auto-detect / target language | Works |
 | Source audio, TTS, or no audio | Works |
 | Local Wan command generation | Default |
-| Replicate Seedance live generation | Optional |
+| Replicate Seedance live generation | Optional, experimental until validated |
 | Resume completed blocks | Works |
 | Concatenate generated blocks | Works |
 | Preserve/mux original audio | Works |
@@ -232,8 +254,9 @@ smp serve
 
 ## Model Modes
 
-Local Wan is the default. Replicate models are optional direct-cloud modes. Costs are
-estimates only; check provider pricing before spending real money. Replicate estimates
+Local Wan is the default. Replicate models are optional direct-cloud modes, and the
+Replicate live-generation paths are marked experimental until a validated end-to-end run
+is published. Costs are estimates only; check provider pricing before spending real money. Replicate estimates
 use the public billing tiers available on June 5, 2026. For Seedance 2.0 modes,
 ShortsMoneyPrinter usually sends each source block as a reference video, so the
 estimate uses Replicate's `video_in` tier.

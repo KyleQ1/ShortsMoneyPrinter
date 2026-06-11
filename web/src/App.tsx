@@ -179,6 +179,7 @@ export default function App() {
       const complete = nextPlan.blocks.filter((block) => block.status === "done" || block.status === "skipped").length;
       log(`${nextPlan.status}: ${complete}/${nextPlan.block_count} blocks complete`);
       if (nextPlan.status === "done" || nextPlan.status === "failed") {
+        if (nextPlan.status === "failed" && nextPlan.error) log(`run failed: ${nextPlan.error}`);
         setRunning(false);
         source.close();
         void refreshRuns();
