@@ -1,120 +1,115 @@
 # ShortsMoneyPrinter
 
-ShortsMoneyPrinter is an open-source local engine for remixing short-form videos with
-AI video models.
+![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
+![FastAPI](https://img.shields.io/badge/API-FastAPI-009688)
+![React](https://img.shields.io/badge/UI-React%20%2B%20Vite-646cff)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Local First](https://img.shields.io/badge/local-first-111827)
 
-Paste a YouTube, TikTok, Instagram URL, or local MP4. The app downloads or copies the
-source, splits it into model-sized blocks, writes deterministic prompts, estimates
-cost before spending credits, optionally calls Seedance, preserves the original audio,
-and exports a final MP4.
+Generate and remix short-form videos with AI from a URL or local MP4.
 
-This repo is for power users: developers, technical creators, agencies, and AI video
-experimenters who are comfortable with local setup, API keys, ffmpeg, and model costs.
+Give ShortsMoneyPrinter a YouTube, TikTok, Instagram URL, or local video file. It
+downloads or copies the source, probes the media, splits it into model-sized blocks,
+writes prompts, estimates cost before spending credits, optionally calls Seedance
+through your Replicate key, preserves source audio, and exports a final MP4.
 
 ```bash
 smp run <url-or-local-video> --style nursery-3d --max-total-seconds 10
 smp serve
 ```
 
-Open the local app at:
+Open the local app:
 
 ```text
 http://127.0.0.1:8080
 ```
 
-## Why This Exists
+## What It Does
 
-Short-form AI video tools are usually either expensive hosted products or messy local
-scripts. ShortsMoneyPrinter aims for the self-hosted middle:
+- Turn existing short videos into new AI-generated versions.
+- Plan a remix before spending provider credits.
+- Run from a browser UI, CLI, or local FastAPI API.
+- Use BYO Replicate for live Seedance generation.
+- Preserve original source audio when possible.
+- Generate block prompts without needing an LLM key.
+- Resume runs by skipping completed generated blocks.
+- Export local MP4 files that you own.
 
-- local and inspectable
-- cost-aware before provider calls
-- useful from both CLI and browser
-- BYO Replicate API key for cloud models
-- useful even if you only want local planning and cost estimates
+ShortsMoneyPrinter is the open-source, self-hosted path. If you want managed
+accounts, queues, credits, storage, and cheaper direct-provider generation without
+setting up BytePlus/ModelArk yourself, use the hosted product: ShortsPrinter.
 
-If you want the easier hosted path, use ShortsPrinter. The hosted product handles
-accounts, queues, managed generation, and cheaper direct provider access so you do
-not have to fight BytePlus/ModelArk setup.
+## Features
 
-## What Works Today
+| Feature | Status |
+|---|---|
+| URL or local MP4 input | Works |
+| YouTube/TikTok/Instagram download via yt-dlp | Works, subject to platform edge cases |
+| Media probing with ffprobe | Works |
+| <=15 second model block splitting | Works |
+| Reference clip, keyframe, and audio extraction | Works |
+| Deterministic prompt generation | Works |
+| Cost estimate before provider calls | Works |
+| Replicate Seedance live generation | Works |
+| Resume completed blocks | Works |
+| Concatenate generated blocks | Works |
+| Preserve/mux original audio | Works |
+| Optional burned-in captions | Works |
+| Browser UI | Works |
+| Local FastAPI API | Works |
+| Local Wan command mode | Experimental |
+| Direct BytePlus/ModelArk in OSS | Not included |
+| Social posting/scheduling | Hosted roadmap |
 
-- Plan a remix from a public URL or local video file.
-- Probe duration, resolution, aspect ratio, and source audio.
-- Split the source into blocks of 15 seconds or less.
-- Extract reference clips, keyframes, and source audio.
-- Generate deterministic prompts without an LLM key.
-- Estimate model cost before any provider call.
-- Run live generation through Replicate Seedance.
-- Resume live runs by skipping completed generated blocks.
-- Concatenate generated blocks and mux preserved source audio.
-- Optionally burn captions into the final MP4.
-- Use the same runner from the CLI and FastAPI React app.
+## Interfaces
 
-## Not Done Yet
-
-- Real-world hardening across many YouTube/TikTok/Instagram edge cases.
-- Direct Seedance/BytePlus integration for self-hosted users.
-- Fully validated local Wan GPU workflow.
-- Automatic hook/script rewriting.
-- Social posting, scheduling, and analytics.
-- Hosted accounts, queues, billing, and managed credits. Use ShortsPrinter for that.
-- Consistent character/brand kits.
-
-## Quickstart
-
-Requirements:
-
-- Python 3.11+
-- ffmpeg and ffprobe on your PATH
-- Node 20+ if you want to rebuild the React UI
-- Replicate API token for live cloud generation
-
-Install:
-
-```bash
-git clone <repo>
-cd ShortsMoneyPrinter
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[seedance]"
-cp config.example.toml config.toml
-```
-
-Set your Replicate key for live runs. The open-source tool expects self-hosted users
-to call Replicate directly:
-
-```bash
-export REPLICATE_API_TOKEN="your-token"
-```
-
-Build the React UI once:
-
-```bash
-cd web
-npm install
-npm run build
-cd ..
-```
-
-Start the local server:
+### Web UI
 
 ```bash
 smp serve
 ```
 
-Use `http://127.0.0.1:8080` for the local remix app.
+Then open:
 
-## CLI Examples
+```text
+http://127.0.0.1:8080
+```
 
-Dry-run only. This does not spend credits:
+The web app lets you paste a source, choose style/model settings, plan the remix,
+review the estimate, then run live generation only after confirming the cost cap.
+
+### API
+
+Start the local server:
+
+```bash
+smp serve --no-open
+```
+
+FastAPI docs are available at:
+
+```text
+http://127.0.0.1:8080/docs
+```
+
+Important routes:
+
+- `POST /api/runs/plan`
+- `POST /api/runs/{run_id}/start`
+- `GET /api/runs/{run_id}`
+- `GET /api/runs/{run_id}/events`
+- `GET /api/runs/{run_id}/final.mp4`
+- `GET /api/runs`
+
+### CLI
+
+Dry run with no provider spend:
 
 ```bash
 smp run <url-or-local-video> --style nursery-3d --max-total-seconds 10
 ```
 
-Live Standard run. This can spend Replicate credits and refuses to start if the
-estimate exceeds your cap:
+Live generation with Replicate Seedance:
 
 ```bash
 smp run <url-or-local-video> \
@@ -125,68 +120,138 @@ smp run <url-or-local-video> \
   --max-cost 10
 ```
 
-Optional prompt:
+List recent local runs:
 
 ```bash
-smp run <url-or-local-video> \
-  --prompt "make it playful, toy-like, and colorful" \
-  --max-total-seconds 10
+smp runs
 ```
 
-Optional captions:
+List style presets:
 
 ```bash
-smp run <url-or-local-video> --captions --max-total-seconds 10
+smp styles
 ```
 
-Captions are off by default because they add local transcription/render time and
-require Whisper plus ffmpeg subtitle support.
+## Requirements
 
-## Browser Flow
+- macOS, Linux, or Windows
+- Python 3.11+
+- ffmpeg and ffprobe on your PATH
+- Node 20+ only if you want to rebuild the React UI
+- Replicate API token only if you want live cloud generation
 
-The React app has two main buttons:
+GPU is not required for the default Replicate path. Local GPU only matters if you
+wire the experimental local Wan command mode.
 
-**Plan** creates the dry-run timeline and cost estimate. It downloads or copies the
-source, probes metadata, splits blocks, extracts audio/keyframes, writes prompts, and
-writes `plan.json`. It does not call Replicate and does not spend credits.
+## Quick Start
 
-**Run** reuses the current plan when possible, checks the estimate against your max
-cost, asks for confirmation, and only then starts live generation.
+### 1. Install
 
-If the estimate is higher than your max cost, the app stops before provider calls and
-tells you the estimated amount.
+```bash
+git clone https://github.com/KyleQ1/ShortsMoneyPrinter.git
+cd ShortsMoneyPrinter
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[seedance]"
+cp config.example.toml config.toml
+```
+
+On Windows, activate the virtual environment with:
+
+```powershell
+.\.venv\Scripts\activate
+```
+
+### 2. Set Replicate Key For Live Runs
+
+The open-source tool expects self-hosted users to call Replicate directly:
+
+```bash
+export REPLICATE_API_TOKEN="your-token"
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:REPLICATE_API_TOKEN="your-token"
+```
+
+You can still plan runs without this key.
+
+### 3. Build The Web UI
+
+```bash
+cd web
+npm install
+npm run build
+cd ..
+```
+
+### 4. Start The App
+
+```bash
+smp serve
+```
 
 ## Model Modes
 
 Costs are estimates only. Check provider pricing before spending real money. These
 Replicate estimates use the public billing tiers available on June 5, 2026. For
-Seedance 2.0 modes, this app usually sends each source block as a reference video, so
-the estimate uses Replicate's `video_in` tier instead of the cheaper non-video-input
-tier.
+Seedance 2.0 modes, ShortsMoneyPrinter usually sends each source block as a reference
+video, so the estimate uses Replicate's `video_in` tier.
 
-| CLI value | Visible model | Input | Resolution | What to expect |
+| CLI value | Model | Input | Resolution | Estimate |
 |---|---|---|---|---|
-| `budget` | Replicate Seedance 1.5 Pro | keyframe image-to-video | 480p | $0.013/sec without generated audio, around $0.13 for 10s or $0.39 for 30s. Does not take direct video input, so the app uses a keyframe. |
-| `standard` | Replicate Seedance 2.0 Fast | video-to-video | 480p | $0.08/sec using the video-input tier, around $0.80 for 10s or $2.40 for 30s. Best default for faithful source motion. |
-| `premium` | Replicate Seedance 2.0 | video-to-video | 720p | $0.22/sec using the video-input tier, around $2.20 for 10s or $6.60 for 30s. Highest cloud quality, most expensive. |
-| `local` | External Wan 2.2 TI2V-5B command | local command | local | $0 cloud cost, but requires your own hardware and command. Not validated here yet. |
+| `budget` | Replicate Seedance 1.5 Pro | keyframe image-to-video | 480p | $0.013/sec, around $0.13 for 10s |
+| `standard` | Replicate Seedance 2.0 Fast | video-to-video | 480p | $0.08/sec, around $0.80 for 10s |
+| `premium` | Replicate Seedance 2.0 | video-to-video | 720p | $0.22/sec, around $2.20 for 10s |
+| `local` | External Wan command | local command | local | $0 cloud cost, uses your own setup |
 
 The browser app defaults to a `$10.00 USD` max-cost cap and leaves Max seconds blank,
 which means it plans the full source. Enter `10` for faster, cheaper tests.
 
-## Hosted Alternative
+## Example Workflows
 
-ShortsMoneyPrinter is the local, inspectable version: bring your own Replicate key,
-run the pipeline on your machine, and own the output files.
+### Recreate A Viral Clip In A Style
 
-ShortsPrinter is the hosted version: it manages account state, queues, credits,
-storage, and direct provider generation behind the scenes. That should be cheaper
-than asking every user to run through Replicate, and it avoids the hard part for most
-creators: getting BytePlus/ModelArk access configured correctly.
+```bash
+smp run "https://example.com/short" \
+  --style anime \
+  --quality standard \
+  --max-total-seconds 10
+```
 
-## Run Folder
+### Add Custom Direction
 
-Each run writes a local folder:
+```bash
+smp run ./source.mp4 \
+  --prompt "make it colorful, toy-like, and optimized for Shorts" \
+  --max-total-seconds 10
+```
+
+### Burn Captions
+
+```bash
+smp run ./source.mp4 --captions --max-total-seconds 10
+```
+
+Captions are off by default because they add transcription and render time.
+
+### Test Seedance Conditioning
+
+```bash
+smp test-seedance ./source.mp4 --seconds 12 --style nursery-3d
+```
+
+### Preview Split Blocks
+
+```bash
+smp split ./source.mp4 --max 12 --write ./blocks
+```
+
+## Output Folder
+
+Each run writes local files:
 
 ```text
 runs/<run-id>/
@@ -202,6 +267,53 @@ runs/<run-id>/
 ```
 
 `captions.ass`, generated blocks, and `final.mp4` appear only when those steps run.
+
+## Configuration
+
+Copy the example config:
+
+```bash
+cp config.example.toml config.toml
+```
+
+Use environment variables for secrets. Do not commit provider keys.
+
+```bash
+export REPLICATE_API_TOKEN="your-token"
+```
+
+## Troubleshooting
+
+**Plan says ffmpeg or ffprobe is missing**
+
+Install ffmpeg and make sure both `ffmpeg` and `ffprobe` are on your PATH.
+
+**URL download fails**
+
+Use a public YouTube, TikTok, or Instagram video URL. Private, login-protected,
+age-gated, removed, or platform-blocked videos may fail. If a URL keeps failing,
+download the video yourself and use the local file path.
+
+**Run says the Replicate package is missing**
+
+Install the Seedance extra:
+
+```bash
+pip install -e ".[seedance]"
+```
+
+**Run says the Replicate token is missing**
+
+Set `REPLICATE_API_TOKEN`, then restart `smp serve`.
+
+**Estimate is over your max cost**
+
+Lower Max seconds, choose Budget, or increase the max-cost cap intentionally.
+
+**Local Wan mode fails**
+
+Local mode requires a command that writes the generated block to `{output}` and can use
+`{input}`, `{keyframe}`, `{prompt}`, `{output}`, and `{index}` placeholders.
 
 ## Development
 
@@ -234,56 +346,15 @@ in another terminal:
 smp serve --no-open
 ```
 
-## Troubleshooting
-
-**Plan says ffmpeg or ffprobe is missing**
-
-Install ffmpeg and make sure both `ffmpeg` and `ffprobe` are on your PATH.
-
-**URL download fails**
-
-Use a public YouTube, TikTok, or Instagram video URL. Private, login-protected,
-age-gated, removed, or platform-blocked videos may fail. If a URL keeps failing,
-download the video yourself and use the local file path.
-
-**Run says the Replicate package is missing**
-
-Install the Seedance extra:
-
-```bash
-pip install -e ".[seedance]"
-```
-
-**Run says the Replicate token is missing**
-
-Set:
-
-```bash
-export REPLICATE_API_TOKEN="your-token"
-```
-
-Then restart `smp serve`.
-
-**Estimate is over your max cost**
-
-Lower Max seconds, choose Budget, or increase the max-cost cap intentionally.
-
-**Local Wan mode fails**
-
-Local mode requires a command that writes the generated block to `{output}` and can use
-`{input}`, `{keyframe}`, `{prompt}`, `{output}`, and `{index}` placeholders. This path
-is experimental and has not been validated on this machine.
-
 ## Roadmap
 
-Near-term priorities:
-
-- Validate one real Replicate Seedance 2.0 Fast live run end to end.
-- Improve URL failure messages based on real test cases.
-- Add a public demo video/GIF.
-- Validate Budget and Premium modes.
-- Keep polishing the React local app as the BYO-Replicate path.
+- Add public demo video/GIFs.
+- Validate more real-world TikTok, YouTube Shorts, and Instagram Reels sources.
+- Improve URL failure messages.
+- Validate Budget and Premium modes end to end.
+- Improve the React local app.
 - Prototype consistent character and brand-kit planning.
+- Keep hosted accounts, queues, billing, and managed direct-provider credits in ShortsPrinter.
 
 ## Legal
 
@@ -293,5 +364,4 @@ having the rights to what you publish and for complying with each platform's ter
 
 ## License
 
-Source-available. Free for self-hosted personal and commercial creation; the hosted
-multi-tenant service is the commercial offering.
+MIT. Use it, fork it, modify it, and ship with it.
