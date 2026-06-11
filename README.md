@@ -1,4 +1,8 @@
-# ShortsMoneyPrinter
+<div align="center">
+
+# 💸 ShortsMoneyPrinter
+
+Generate and remix short-form videos with AI from a URL or local MP4.
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![FastAPI](https://img.shields.io/badge/API-FastAPI-009688)
@@ -6,7 +10,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Local First](https://img.shields.io/badge/local-first-111827)
 
-Generate and remix short-form videos with AI from a URL or local MP4.
+</div>
 
 Give ShortsMoneyPrinter a YouTube, TikTok, Instagram URL, or local video file. It
 downloads or copies the source, probes the media, splits it into model-sized blocks,
@@ -355,7 +359,3 @@ smp serve --no-open
 - Improve the React local app.
 - Prototype consistent character and brand-kit planning.
 - Keep hosted accounts, queues, billing, and managed direct-provider credits in ShortsPrinter.
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=KyleQ1/ShortsMoneyPrinter&type=Date)](https://www.star-history.com/#KyleQ1/ShortsMoneyPrinter&Date)
