@@ -1,11 +1,11 @@
-"""Seedance 2.0 reference-to-video provider. BYO key — optional/Phase-5 feature.
+"""Seedance 2.0 reference-to-video provider. BYO key.
 
 Takes a CONDITIONED reference video (see video_conditioning) + a prompt, and generates a
 new short clip guided by it. Seedance is reference-based (subject/motion/style), not a
 1:1 frame transform — and inputs must already meet the limits before they get here.
 
 Default backend: Replicate (model `bytedance/seedance-2.0`), token from REPLICATE_API_TOKEN.
-Routed by [video_gen] endpoint in config.toml: "replicate" (default) | "fal".
+Routed by the VIDEO_ENDPOINT env var: "replicate" (default) | "fal".
 """
 
 from __future__ import annotations

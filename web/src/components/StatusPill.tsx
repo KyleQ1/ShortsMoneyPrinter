@@ -2,10 +2,10 @@ import type { ReactNode } from "react";
 import { classNames } from "../lib";
 
 const toneClass = {
-  good: "border-green-200 bg-green-50 text-success",
-  warn: "border-orange-200 bg-orange-50 text-warning",
-  bad: "border-red-200 bg-red-50 text-danger",
-  neutral: "border-line bg-white text-muted",
+  good: "border-success/30 bg-success/10 text-success",
+  warn: "border-warning/30 bg-warning/10 text-warning",
+  bad: "border-danger/30 bg-danger/10 text-danger",
+  neutral: "border-line bg-surface-2/80 text-muted",
 };
 
 export function StatusPill({

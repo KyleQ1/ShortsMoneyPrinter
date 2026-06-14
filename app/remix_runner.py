@@ -15,21 +15,22 @@ import shlex
 import shutil
 import subprocess
 import uuid
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
+from app.model_catalog import QUALITY_PROFILES, QualityProfile
 from app.models import AspectRatio
 from app.services import styles, video_conditioning as vc
 
-Quality = Literal["budget", "standard", "premium", "local"]
+Quality = str
 Language = Literal["auto", "en", "zh", "hi", "es", "fr", "de", "ja", "ko", "pt"]
 AudioMode = Literal["source", "tts", "none"]
+CaptionPosition = Literal["bottom", "center", "top"]
 BlockStatus = Literal["planned", "generating", "done", "failed", "skipped"]
 RunStatus = Literal["planned", "running", "done", "failed"]
 
@@ -55,57 +56,6 @@ class CommandError(RuntimeError):
         return f"{self.stderr}\n{self.stdout}".strip()
 
 
-@dataclass(frozen=True)
-class QualityProfile:
-    key: Quality
-    provider: str
-    model_id: str
-    model_label: str
-    mode: str
-    resolution: str
-    estimated_cost_per_second: float
-
-
-QUALITY_PROFILES: dict[Quality, QualityProfile] = {
-    "budget": QualityProfile(
-        key="budget",
-        provider="replicate",
-        model_id="bytedance/seedance-1.5-pro",
-        model_label="Replicate Seedance 1.5 Pro",
-        mode="image-to-video",
-        resolution="480p",
-        estimated_cost_per_second=0.013,
-    ),
-    "standard": QualityProfile(
-        key="standard",
-        provider="replicate",
-        model_id="bytedance/seedance-2.0-fast",
-        model_label="Replicate Seedance 2.0 Fast",
-        mode="video-to-video",
-        resolution="480p",
-        estimated_cost_per_second=0.08,
-    ),
-    "premium": QualityProfile(
-        key="premium",
-        provider="replicate",
-        model_id="bytedance/seedance-2.0",
-        model_label="Replicate Seedance 2.0",
-        mode="video-to-video",
-        resolution="720p",
-        estimated_cost_per_second=0.22,
-    ),
-    "local": QualityProfile(
-        key="local",
-        provider="local",
-        model_id="wan-2.2-ti2v-5b",
-        model_label="Wan 2.2 TI2V-5B",
-        mode="local-ti2v",
-        resolution="local",
-        estimated_cost_per_second=0.0,
-    ),
-}
-
-
 class RemixRequest(BaseModel):
     source: str
     style: str = styles.DEFAULT_STYLE
@@ -118,8 +68,9 @@ class RemixRequest(BaseModel):
     quality: Quality = "local"
     max_cost: float | None = None
     captions: bool = False
+    caption_position: CaptionPosition = "bottom"
     max_total_seconds: float | None = None
-    wan_command: str | None = None
+    local_command: str | None = None
 
 
 class BlockPlan(BaseModel):
@@ -175,9 +126,10 @@ class RunPlan(BaseModel):
     aspect_ratio: str = "9:16"
     has_audio: bool
     captions: bool = False
+    caption_position: CaptionPosition = "bottom"
     captions_path: str | None = None
     max_cost: float | None = None
-    wan_command: str | None = None
+    local_command: str | None = None
     estimated_cost: float
     block_count: int
     blocks: list[BlockPlan] = Field(default_factory=list)
@@ -194,18 +146,31 @@ class RemixProvider:
 
 class SeedanceProvider(RemixProvider):
     def generate_block(self, plan: RunPlan, block: BlockPlan) -> str:
-        profile = QUALITY_PROFILES[plan.quality]
+        profile = _quality_profile(plan.quality)
         out_path = block.generated_path
         Path(out_path).parent.mkdir(parents=True, exist_ok=True)
 
-        if plan.quality == "local":
-            return _run_local_wan(plan, block)
+        if profile.provider == "local":
+            return _run_local_model(plan, block)
+
+        duration = str(max(4, min(15, math.ceil(block.duration))))
+        if _remote_endpoint() == "seedance2":
+            from app.services.providers import seedance2
+
+            return seedance2.generate_from_image(
+                block.keyframe,
+                block.prompt,
+                out_path,
+                AspectRatio.VERTICAL,
+                resolution=profile.resolution,
+                duration=duration,
+                model_key=plan.quality,
+            )
 
         from app.services.providers import seedance
 
         style = styles.get(plan.style)
-        duration = str(max(4, min(15, math.ceil(block.duration))))
-        if plan.quality == "budget":
+        if profile.input_kind == "image":
             return seedance.generate_from_image(
                 block.keyframe,
                 block.prompt,
@@ -224,14 +189,14 @@ class SeedanceProvider(RemixProvider):
             duration=duration,
             generate_audio=False,
             match_reference=style.match_reference,
-            fast=plan.quality == "standard",
+            fast="fast" in profile.model_id,
         )
 
 
 def preflight_status() -> dict[str, object]:
     """Return local capability hints for UI and diagnostics."""
     cfg = get_settings().video_gen
-    endpoint = (cfg.endpoint or "replicate").lower()
+    endpoint = _remote_endpoint()
     return {
         "ffmpeg": bool(shutil.which("ffmpeg")),
         "ffprobe": bool(shutil.which("ffprobe")),
@@ -241,6 +206,7 @@ def preflight_status() -> dict[str, object]:
             or importlib.util.find_spec("yt_dlp")
         ),
         "endpoint": endpoint,
+        "seedance2_cookie": bool(_temporary_seedance2_cookie()),
         "replicate_token": bool(cfg.api_key or os.environ.get("REPLICATE_API_TOKEN")),
         "replicate_package": bool(importlib.util.find_spec("replicate")),
         "fal_token": bool(cfg.api_key or os.environ.get("FAL_KEY")),
@@ -262,6 +228,14 @@ def user_error_message(exc: Exception) -> str:
     return message or f"{type(exc).__name__}: failed"
 
 
+def _quality_profile(quality: str) -> QualityProfile:
+    try:
+        return QUALITY_PROFILES[quality]
+    except KeyError as exc:
+        available = ", ".join(QUALITY_PROFILES)
+        raise ValueError(f"Unknown model {quality!r}. Choose one of: {available}") from exc
+
+
 def create_plan(request: RemixRequest, runs_dir: Path = RUNS_DIR) -> RunPlan:
     """Create a dry-run plan and stop before provider calls."""
     _require_media_tools()
@@ -270,7 +244,7 @@ def create_plan(request: RemixRequest, runs_dir: Path = RUNS_DIR) -> RunPlan:
     if request.max_total_seconds is not None and request.max_total_seconds <= 0:
         raise ValueError("max_total_seconds must be greater than 0.")
     styles.get(request.style)
-    profile = QUALITY_PROFILES[request.quality]
+    profile = _quality_profile(request.quality)
     run_id = _new_run_id()
     run_dir = runs_dir / run_id
     source_dir = run_dir / "source"
@@ -347,11 +321,11 @@ def create_plan(request: RemixRequest, runs_dir: Path = RUNS_DIR) -> RunPlan:
                 prompt_path=prompt_path,
                 prompt=prompt,
                 generated_path=generated_path,
-                estimated_cost=round(length * profile.estimated_cost_per_second, 2),
+                estimated_cost=round(length * profile.cost_per_second(), 2),
             )
         )
 
-    estimated_cost = round(duration * profile.estimated_cost_per_second, 2)
+    estimated_cost = round(duration * profile.cost_per_second(), 2)
     plan = RunPlan(
         run_id=run_id,
         created_at=datetime.now(UTC).isoformat(),
@@ -381,8 +355,9 @@ def create_plan(request: RemixRequest, runs_dir: Path = RUNS_DIR) -> RunPlan:
         aspect_ratio=metadata.aspect_ratio or _aspect_label(width, height),
         has_audio=has_audio,
         captions=request.captions,
+        caption_position=request.caption_position,
         max_cost=request.max_cost,
-        wan_command=request.wan_command,
+        local_command=_local_command_from_request(request),
         estimated_cost=estimated_cost,
         block_count=len(block_models),
         blocks=block_models,
@@ -534,24 +509,65 @@ def _require_media_tools() -> None:
 
 
 def _validate_live_preflight(plan: RunPlan) -> None:
-    if plan.quality == "local":
-        if not plan.wan_command:
+    profile = _quality_profile(plan.quality)
+    if profile.provider == "local":
+        if not _local_command_from_plan(plan):
             raise RuntimeError(
-                "Local quality requires a Wan command. Add one in the Wan command field "
+                f"{profile.model_label} requires a local command. Add one in the local command field "
                 "using {input}, {keyframe}, {prompt}, and {output} placeholders."
             )
         return
 
     cfg = get_settings().video_gen
-    endpoint = (cfg.endpoint or "replicate").lower()
+    endpoint = _remote_endpoint()
+    if endpoint == "seedance2":
+        if not _temporary_seedance2_cookie():
+            raise UserFacingError(
+                "Missing temporary Seedance2 cookie. Set SEEDANCE2_COOKIE or SEEDANCE_API_TOKEN "
+                "in .env before clicking Run Live."
+            )
+        return
+    if endpoint == "fal":
+        if not (cfg.api_key or os.environ.get("FAL_KEY")):
+            raise UserFacingError("Missing fal key. Set FAL_KEY in .env before clicking Run Live.")
+        if not importlib.util.find_spec("fal_client"):
+            raise UserFacingError("Missing fal-client package. Install with: pip install -e '.[seedance]'")
+        return
     if endpoint != "replicate":
-        raise UserFacingError("Live remix generation is currently supported through Replicate only.")
+        raise UserFacingError(
+            "Unknown video_gen endpoint. Use replicate or fal. The direct Seedance2 path "
+            "is a temporary local test override when SEEDANCE2_COOKIE is set."
+        )
     if not (cfg.api_key or os.environ.get("REPLICATE_API_TOKEN")):
         raise UserFacingError(
             "Missing Replicate token. Set REPLICATE_API_TOKEN in .env before clicking Run Live."
         )
     if not importlib.util.find_spec("replicate"):
         raise UserFacingError("Missing Replicate package. Install with: pip install -e '.[seedance]'")
+
+
+def _remote_endpoint() -> str:
+    endpoint = (get_settings().video_gen.endpoint or "replicate").lower()
+    # Temporary local test path for seedance2.ai. Keep the public config/catalog on
+    # Replicate until the direct API is stable enough to support.
+    if endpoint == "replicate" and _temporary_seedance2_cookie():
+        return "seedance2"
+    return endpoint
+
+
+def _temporary_seedance2_cookie() -> str:
+    legacy = (os.environ.get("SEEDANCE2_COOKIE") or os.environ.get("SEEDANCE_API_TOKEN") or "").strip()
+    if legacy:
+        return legacy
+    # Auto-refresh path: route to seedance2 when an anon key + seed are configured.
+    try:
+        from app.services.providers import seedance2_auth
+
+        if seedance2_auth.is_configured():
+            return "auto"
+    except Exception:
+        pass
+    return ""
 
 
 def _materialize_source(source: str, dest: str) -> SourceMetadata:
@@ -575,24 +591,30 @@ def _materialize_source(source: str, dest: str) -> SourceMetadata:
 
 
 def _download_url(url: str, dest: str) -> None:
+    last_error: CommandError | None = None
+    for candidate in _download_candidates(url):
+        try:
+            _run(_yt_dlp_command(candidate, dest), "yt-dlp download failed")
+            return
+        except CommandError as exc:
+            last_error = exc
+    if last_error:
+        raise last_error
+
+
+def _yt_dlp_command(url: str, dest: str) -> list[str]:
     exe = shutil.which("yt-dlp") or shutil.which("yt_dlp")
     if exe:
-        cmd = [
-            exe,
-            "-f",
-            "bv*+ba/b",
-            "--merge-output-format",
-            "mp4",
-            "--write-info-json",
-            "-o",
-            dest,
-            url,
-        ]
+        cmd = [exe]
     else:
         cmd = [
             "python",
             "-m",
             "yt_dlp",
+        ]
+    cmd.extend(
+        [
+            "--no-playlist",
             "-f",
             "bv*+ba/b",
             "--merge-output-format",
@@ -600,9 +622,39 @@ def _download_url(url: str, dest: str) -> None:
             "--write-info-json",
             "-o",
             dest,
-            url,
         ]
-    _run(cmd, "yt-dlp download failed")
+    )
+    cookies_file = os.environ.get("YTDLP_COOKIES_FILE", "").strip()
+    if cookies_file:
+        cmd.extend(["--cookies", str(Path(cookies_file).expanduser())])
+    cmd.append(url)
+    return cmd
+
+
+def _download_candidates(url: str) -> list[str]:
+    candidates = [url]
+    normalized = _normalize_youtube_video_url(url)
+    if normalized and normalized not in candidates:
+        candidates.append(normalized)
+    return candidates
+
+
+def _normalize_youtube_video_url(url: str) -> str | None:
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    video_id: str | None = None
+    if "youtube.com" in host:
+        parts = [part for part in parsed.path.split("/") if part]
+        if len(parts) >= 2 and parts[0] == "shorts":
+            video_id = parts[1]
+        elif parsed.path == "/watch":
+            video_id = parse_qs(parsed.query).get("v", [None])[0]
+    elif host == "youtu.be" and parsed.path.strip("/"):
+        video_id = parsed.path.strip("/").split("/")[0]
+    if not video_id:
+        return None
+    query = urlencode({"v": video_id})
+    return urlunparse(("https", "www.youtube.com", "/watch", "", query, ""))
 
 
 def _download_error_message(url: str, output: str) -> str:
@@ -612,6 +664,23 @@ def _download_error_message(url: str, output: str) -> str:
         return (
             f"Could not download this {platform} URL because yt-dlp does not support it. "
             "Try a public YouTube, TikTok, or Instagram video URL, or use a local MP4 path."
+        )
+    if platform == "youtube" and any(
+        token in lower
+        for token in (
+            "this video is not available",
+            "video unavailable",
+            "not available",
+            "playability status: unplayable",
+            "remote components challenge",
+            "po token",
+        )
+    ):
+        return (
+            "Could not download this YouTube video with yt-dlp. YouTube can block "
+            "automated extraction even when the video page still embeds. Try another "
+            "public Short, update yt-dlp, set YTDLP_COOKIES_FILE to a Netscape cookies.txt "
+            "export, or download the video locally and use the file path."
         )
     if any(token in lower for token in ("private video", "sign in", "login", "cookies")):
         return (
@@ -694,7 +763,63 @@ def _has_audio(path: str) -> bool:
         capture_output=True,
         text=True,
     )
-    return "audio" in proc.stdout
+    # Only trust a clean probe; a non-zero exit means we couldn't tell, not "no audio".
+    return proc.returncode == 0 and "audio" in proc.stdout
+
+
+def _probe_dims(path: str) -> tuple[int, int]:
+    proc = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=width,height", "-of", "csv=s=x:p=0", path],
+        capture_output=True,
+        text=True,
+    )
+    try:
+        width, height = proc.stdout.strip().split("x")
+        return int(width), int(height)
+    except (ValueError, AttributeError):
+        return 720, 1280
+
+
+def _probe_fps(path: str) -> float:
+    proc = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=r_frame_rate", "-of", "csv=p=0", path],
+        capture_output=True,
+        text=True,
+    )
+    raw = proc.stdout.strip()
+    if proc.returncode != 0 or not raw:
+        return 30.0
+    try:
+        if "/" in raw:
+            num, den = raw.split("/", 1)
+            value = float(num) / float(den) if float(den) else 0.0
+        else:
+            value = float(raw)
+    except ValueError:
+        return 30.0
+    return value if 1.0 <= value <= 120.0 else 30.0
+
+
+def _normalize_for_concat(src: str, dest: str, width: int, height: int, fps: float) -> None:
+    video_filter = (
+        f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black,"
+        f"setsar=1,fps={fps:.5f},format=yuv420p"
+    )
+    _run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-i", src,
+            "-vf", video_filter,
+            "-an",
+            "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+            "-video_track_timescale", "90000",
+            dest,
+        ],
+        "block normalization failed",
+    )
 
 
 def _extract_audio(source: str, dest: str, duration: float) -> None:
@@ -781,17 +906,29 @@ def _extract_keyframe(source: str, dest: str, timestamp: float) -> None:
     )
 
 
-def _run_local_wan(plan: RunPlan, block: BlockPlan) -> str:
-    if not plan.wan_command:
-        raise RuntimeError("local quality requires wan_command")
-    formatted = plan.wan_command.format(
+def _local_command_from_request(request: RemixRequest) -> str | None:
+    command = request.local_command
+    return command.strip() if command and command.strip() else None
+
+
+def _local_command_from_plan(plan: RunPlan) -> str | None:
+    command = plan.local_command
+    return command.strip() if command and command.strip() else None
+
+
+def _run_local_model(plan: RunPlan, block: BlockPlan) -> str:
+    command = _local_command_from_plan(plan)
+    if not command:
+        raise RuntimeError("local generation requires local_command")
+    profile = _quality_profile(plan.quality)
+    formatted = command.format(
         input=block.ref_video,
         keyframe=block.keyframe,
         prompt=block.prompt_path,
         output=block.generated_path,
         index=block.index,
     )
-    _run(shlex.split(formatted), "local Wan command failed")
+    _run(shlex.split(formatted), f"{profile.model_label} command failed")
     return block.generated_path
 
 
@@ -802,12 +939,27 @@ def _stitch_final(plan: RunPlan) -> str:
         raise RuntimeError(f"missing generated block(s): {', '.join(missing)}")
 
     run_dir = Path(plan.run_dir)
-    concat_list = run_dir / "generated" / "concat.txt"
-    concat_video = run_dir / "generated" / "concat_video.mp4"
-    muxed = run_dir / "generated" / "muxed.mp4"
+    gen_dir = run_dir / "generated"
+    concat_list = gen_dir / "concat.txt"
+    concat_video = gen_dir / "concat_video.mp4"
+    muxed = gen_dir / "muxed.mp4"
     final = run_dir / "final.mp4"
+
+    # Generated blocks can come back from different models at different resolutions, frame
+    # rates, or pixel aspect ratios. The concat demuxer assumes uniform parameters and will
+    # corrupt or abort otherwise, so normalize every block to one target spec first.
+    target_w, target_h = plan.width, plan.height
+    if target_w <= 0 or target_h <= 0:
+        target_w, target_h = _probe_dims(str(generated[0]))
+    fps = _probe_fps(str(generated[0]))
+    normalized: list[Path] = []
+    for index, src in enumerate(generated):
+        dest = gen_dir / f"norm_{index:03d}.mp4"
+        _normalize_for_concat(str(src), str(dest), target_w, target_h, fps)
+        normalized.append(dest)
+
     concat_list.write_text(
-        "".join(f"file '{path.resolve().as_posix()}'\n" for path in generated),
+        "".join(f"file '{path.resolve().as_posix()}'\n" for path in normalized),
         encoding="utf-8",
     )
     _run(
@@ -890,6 +1042,7 @@ def _make_captions(plan: RunPlan) -> str:
         Path(plan.run_dir),
         "word-level karaoke, bold, centered",
         AspectRatio.VERTICAL,
+        position=plan.caption_position,
     )
 
 

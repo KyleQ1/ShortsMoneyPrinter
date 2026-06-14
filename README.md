@@ -14,8 +14,8 @@ Generate and remix short-form videos with AI from a URL or local MP4.
 
 Give ShortsMoneyPrinter a YouTube, TikTok, Instagram URL, or local video file. It
 downloads or copies the source, probes the media, splits it into model-sized blocks,
-writes prompts, estimates cost before spending credits, runs your local Wan command
-by default, preserves source audio, and exports a final MP4.
+writes prompts, estimates cost before spending credits, runs your local LTX Video
+command by default, preserves source audio, and exports a final MP4.
 
 ```bash
 smp run <url-or-local-video> --style nursery-3d --max-total-seconds 10
@@ -55,7 +55,8 @@ _Demo video and before/after screenshots land here after the first validated liv
 - Turn existing short videos into new AI-generated versions.
 - Plan a remix before spending provider credits.
 - Run from a browser UI, CLI, or local FastAPI API.
-- Use local Wan generation by default.
+- Use local LTX Video generation by default.
+- Switch local runs to HunyuanVideo 1.5 or Wan 2.2 when those fit your GPU.
 - Switch to BYO Replicate for direct cloud Seedance generation.
 - Add optional subject and script prompts.
 - Auto-detect language or target Chinese, Hindi, English, and more.
@@ -80,7 +81,9 @@ _Demo video and before/after screenshots land here after the first validated liv
 | Optional script prompt | Works |
 | Language auto-detect / target language | Works |
 | Source audio, TTS, or no audio | Works |
-| Local Wan command generation | Default |
+| Local LTX Video command generation | Default |
+| Local HunyuanVideo 1.5 command generation | Works |
+| Local Wan 2.2 command generation | Works |
 | Replicate Seedance live generation | Optional, experimental until validated |
 | Resume completed blocks | Works |
 | Concatenate generated blocks | Works |
@@ -139,7 +142,7 @@ Dry run with no provider spend:
 smp run <url-or-local-video> --style nursery-3d --max-total-seconds 10
 ```
 
-Live generation with local Wan:
+Live generation with local LTX Video:
 
 ```bash
 smp run <url-or-local-video> \
@@ -147,7 +150,7 @@ smp run <url-or-local-video> \
   --max-total-seconds 10 \
   --live \
   --max-cost 10 \
-  --wan-command "python run_wan.py --input {input} --prompt {prompt} --output {output}"
+  --local-command "python run_ltx.py --input {input} --keyframe {keyframe} --prompt {prompt} --output {output}"
 ```
 
 Live generation with Replicate Seedance:
@@ -155,7 +158,7 @@ Live generation with Replicate Seedance:
 ```bash
 smp run <url-or-local-video> \
   --style nursery-3d \
-  --quality standard \
+  --quality seedance-2.0-fast \
   --max-total-seconds 10 \
   --live \
   --max-cost 10
@@ -179,11 +182,16 @@ smp styles
 - Python 3.11+
 - ffmpeg and ffprobe on your PATH
 - Node 20+ only if you want to rebuild the React UI
-- A Wan command for default local live generation
+- A local model command for live generation
 - Replicate API token only if you want direct cloud generation
 
-Replicate is optional. The default model selector is local Wan; if you change the
-browser app to a Replicate model, the app keeps that preference on this machine.
+Replicate is optional. The default model selector is local LTX Video; if you change
+the browser app to Hunyuan, Wan, or a Replicate model, the app keeps that preference
+on this machine.
+
+Local model installs are BYO because each runner has its own CUDA, PyTorch, weight,
+and workflow requirements. See the [Local Model Setup wiki](wiki/Local-Model-Setup.md)
+for LTX Video, HunyuanVideo 1.5, Wan 2.2, and wrapper command examples.
 
 ## Quick Start
 
@@ -195,7 +203,7 @@ cd ShortsMoneyPrinter
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[seedance]"
-cp config.example.toml config.toml
+cp .env.example .env   # optional — only needed for the cloud models
 ```
 
 On Windows, activate the virtual environment with:
@@ -204,26 +212,26 @@ On Windows, activate the virtual environment with:
 .\.venv\Scripts\activate
 ```
 
-### 2. Configure Local Wan For Live Runs
+### 2. Choose Local Or Remote Generation
 
-Plan mode works without a Wan command. Live local generation needs a command that
-writes the generated block to `{output}`. The command can use these placeholders:
-`{input}`, `{keyframe}`, `{prompt}`, `{output}`, and `{index}`.
+Plan mode works without a local model install or provider key. Live generation needs
+one of these paths:
 
-Example:
+**Local:** install your preferred local runner and pass a command that writes the
+generated block to `{output}`. See the
+[Local Model Setup wiki](wiki/Local-Model-Setup.md) for LTX Video, HunyuanVideo 1.5,
+Wan 2.2, GPU notes, and wrapper examples.
 
 ```bash
 smp run ./source.mp4 \
   --live \
   --max-cost 10 \
-  --wan-command "python run_wan.py --input {input} --prompt {prompt} --output {output}"
+  --local-command "python run_ltx.py --input {input} --keyframe {keyframe} --prompt {prompt} --output {output}"
 ```
 
-### 3. Optional: Use Replicate Directly
-
-If you prefer cloud generation, choose a Replicate model in the app or pass
-`--quality standard`, `--quality budget`, or `--quality premium` in the CLI. Then set
-your Replicate key:
+**Remote:** choose a Replicate model in the app or pass `--quality
+seedance-2.0-fast`, `--quality seedance-2.0`, or `--quality seedance-1.5-pro` in
+the CLI. Then set your Replicate key:
 
 ```bash
 export REPLICATE_API_TOKEN="your-token"
@@ -237,7 +245,7 @@ $env:REPLICATE_API_TOKEN="your-token"
 
 You can still plan runs without this key.
 
-### 4. Build The Web UI
+### 3. Build The Web UI
 
 ```bash
 cd web
@@ -246,7 +254,7 @@ npm run build
 cd ..
 ```
 
-### 5. Start The App
+### 4. Start The App
 
 ```bash
 smp serve
@@ -254,26 +262,61 @@ smp serve
 
 ## Model Modes
 
-Local Wan is the default. Replicate models are optional direct-cloud modes, and the
-Replicate live-generation paths are marked experimental until a validated end-to-end run
-is published. Costs are estimates only; check provider pricing before spending real money. Replicate estimates
-use the public billing tiers available on June 5, 2026. For Seedance 2.0 modes,
-ShortsMoneyPrinter usually sends each source block as a reference video, so the
-estimate uses Replicate's `video_in` tier.
+Local LTX Video is the default. HunyuanVideo 1.5 and Wan 2.2 are available as local
+command modes. Replicate models are optional direct-cloud modes, and the Replicate
+live-generation paths are marked experimental until a validated end-to-end run is
+published. Model metadata lives in `models.toml`, which feeds the API, CLI, and
+browser model picker.
 
-| CLI value | Model | Input | Resolution | Estimate |
+Costs are estimates only; check provider pricing before spending real money.
+Replicate estimates use the public billing tiers available on June 5, 2026. Seedance
+pricing changes by input type: image/keyframe input is cheaper than video reference
+input. ShortsMoneyPrinter sends each source block as a reference video for Seedance
+2.0 modes, so those estimates use the video-reference rate.
+
+| CLI value | Model | Input | GPU guidance | Estimate |
 |---|---|---|---|---|
-| `local` | External Wan command | local command | local | $0 cloud cost, uses your own setup |
-| `budget` | Replicate Seedance 1.5 Pro | keyframe image-to-video | 480p | $0.013/sec, around $0.13 for 10s |
-| `standard` | Replicate Seedance 2.0 Fast | video-to-video | 480p | $0.08/sec, around $0.80 for 10s |
-| `premium` | Replicate Seedance 2.0 | video-to-video | 720p | $0.22/sec, around $2.20 for 10s |
+| `local` | LTX Video | local command | Try 2B/distilled on 8-12GB VRAM; use 13B/FP8 on 16-24GB+ | $0 cloud cost |
+| `hunyuan` | HunyuanVideo 1.5 | local command | Upstream minimum is 14GB VRAM with offload; 24GB+ NVIDIA is the practical target | $0 cloud cost |
+| `wan` | Wan 2.2 TI2V-5B | local command | 4090-class NVIDIA GPU recommended for 720p local runs | $0 cloud cost |
+| `seedance-1.5-pro` | Replicate Seedance 1.5 Pro | keyframe image-to-video | Cloud/BYO key | $0.013/sec, around $0.13 for 10s |
+| `seedance-2.0-fast` | Replicate Seedance 2.0 Fast | video-to-video | Cloud/BYO key | $0.08/sec with video input; $0.04/sec with image/keyframe input |
+| `seedance-2.0` | Replicate Seedance 2.0 | video-to-video | Cloud/BYO key | $0.22/sec with video input; $0.11/sec with image/keyframe input |
+
+Local GPU notes are practical starting points, not hard limits. Exact VRAM depends on
+the runner, quantization, offloading, resolution, frame count, and whether you enable
+upscaling. For local models, NVIDIA CUDA is the safest path today; Apple Silicon and
+CPU/offload paths may work only for specific runners and will be much slower.
+
+For install notes and wrapper examples, see the
+[Local Model Setup wiki](wiki/Local-Model-Setup.md).
 
 The browser app defaults to a `$10.00 USD` max-cost cap and leaves Max seconds blank,
 which means it plans the full source. Enter `10` for faster, cheaper tests.
 
+### Adding More Models
+
+ShortsMoneyPrinter keeps model selection intentionally simple. To add another model:
+
+1. Add a `[[models]]` entry in `models.toml` with the model key, provider,
+   `provider_mode`, label, mode, resolution, input kind, and cost estimate.
+2. Use `provider_mode = "local"` for local command models or `provider_mode =
+   "remote"` for cloud/BYO-key models. The browser Local/Remote switch and dropdown
+   are generated from this field.
+3. For Seedance-style pricing, set both `cost_per_second_image` and
+   `cost_per_second_video`, then set `input_kind` to the path this app actually uses
+   for estimation.
+4. For local models, keep using `--local-command` unless the model needs custom
+   backend code. The command receives `{input}`, `{keyframe}`, `{prompt}`, `{output}`,
+   and `{index}` placeholders.
+
+The API exposes the loaded catalog at `GET /api/models`, and the browser renders that
+response directly. Adding another UI option no longer requires editing the form
+component.
+
 ## Example Workflows
 
-### Recreate A Viral Clip With Local Wan
+### Recreate A Viral Clip With Local LTX Video
 
 ```bash
 smp run "https://example.com/short" \
@@ -281,7 +324,29 @@ smp run "https://example.com/short" \
   --max-total-seconds 10 \
   --live \
   --max-cost 10 \
-  --wan-command "python run_wan.py --input {input} --prompt {prompt} --output {output}"
+  --local-command "python run_ltx.py --input {input} --keyframe {keyframe} --prompt {prompt} --output {output}"
+```
+
+### Use HunyuanVideo 1.5 Locally
+
+```bash
+smp run ./source.mp4 \
+  --quality hunyuan \
+  --live \
+  --max-cost 10 \
+  --max-total-seconds 10 \
+  --local-command "python run_hunyuan.py --input {input} --keyframe {keyframe} --prompt {prompt} --output {output}"
+```
+
+### Use Wan 2.2 Locally
+
+```bash
+smp run ./source.mp4 \
+  --quality wan \
+  --live \
+  --max-cost 10 \
+  --max-total-seconds 10 \
+  --local-command "python run_wan.py --input {input} --keyframe {keyframe} --prompt {prompt} --output {output}"
 ```
 
 ### Add Custom Direction
@@ -298,7 +363,7 @@ smp run ./source.mp4 \
 export REPLICATE_API_TOKEN="your-token"
 
 smp run ./source.mp4 \
-  --quality standard \
+  --quality seedance-2.0-fast \
   --live \
   --max-cost 10 \
   --max-total-seconds 10
@@ -357,16 +422,15 @@ runs/<run-id>/
 
 ## Configuration
 
-Copy the example config:
+ShortsMoneyPrinter is configured entirely through environment variables — there is no
+config file to manage, and it runs on sensible defaults out of the box. Override anything
+in a `.env` file (copy `.env.example`) or in your shell. Never commit provider keys.
 
 ```bash
-cp config.example.toml config.toml
-```
-
-Use environment variables for secrets. Do not commit provider keys.
-
-```bash
-export REPLICATE_API_TOKEN="your-token"
+export REPLICATE_API_TOKEN="your-token"   # only for the cloud Seedance models
+export VIDEO_ENDPOINT="replicate"          # replicate | fal
+export TTS_VOICE="en-US-AriaNeural"        # voice when a run's audio mode is "tts"
+export WHISPER_MODEL="large-v3"            # caption model: tiny | base | small | medium | large-v3
 ```
 
 ## Troubleshooting
@@ -380,6 +444,12 @@ Install ffmpeg and make sure both `ffmpeg` and `ffprobe` are on your PATH.
 Use a public YouTube, TikTok, or Instagram video URL. Private, login-protected,
 age-gated, removed, or platform-blocked videos may fail. If a URL keeps failing,
 download the video yourself and use the local file path.
+
+YouTube can also block yt-dlp extraction for a Short even when the page still embeds.
+Update yt-dlp first. If the video needs a logged-in session, export YouTube cookies in
+Netscape `cookies.txt` format and set `YTDLP_COOKIES_FILE=/absolute/path/to/cookies.txt`
+in `.env`, then restart `smp serve`. Do not paste cookies into issues, commits, or
+terminal logs.
 
 **Run says the Replicate package is missing**
 
@@ -397,7 +467,7 @@ Set `REPLICATE_API_TOKEN`, then restart `smp serve`.
 
 Lower Max seconds, choose Budget, or increase the max-cost cap intentionally.
 
-**Local Wan mode fails**
+**Local model mode fails**
 
 Local mode requires a command that writes the generated block to `{output}` and can use
 `{input}`, `{keyframe}`, `{prompt}`, `{output}`, and `{index}` placeholders.
@@ -441,4 +511,3 @@ smp serve --no-open
 - Validate Budget and Premium modes end to end.
 - Improve the React local app.
 - Prototype consistent character and brand-kit planning.
-- Keep hosted accounts, queues, billing, and managed direct-provider credits in ShortsPrinter.

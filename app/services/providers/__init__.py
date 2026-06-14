@@ -1,1 +1,1 @@
-"""Pluggable provider adapters (LLM, video gen, TTS, stock). Selected via config.toml."""
+"""Video-generation provider adapters (Replicate / fal / local command)."""

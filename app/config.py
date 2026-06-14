@@ -1,22 +1,24 @@
-"""Load config.toml into typed settings. Provider-pluggable; blank section = disabled."""
+"""Runtime settings, sourced from environment variables (and .env) with sensible defaults.
+
+There is no config file: models live in models.toml, and the few runtime knobs below come
+from the environment. To add a setting, add a field to the matching model and read one env
+var for it in get_settings(). Secrets (REPLICATE_API_TOKEN, FAL_KEY, …) stay in .env.
+"""
 
 from __future__ import annotations
 
 import os
-import tomllib
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic import BaseModel
 
-CONFIG_PATH = Path("config.toml")
 ENV_PATH = Path(".env")
 
 
 def _load_dotenv() -> None:
-    """Load KEY=VALUE pairs from .env into os.environ (no override of real env vars).
+    """Load KEY=VALUE pairs from .env into os.environ (without overriding real env vars).
 
-    Keeps secrets (REPLICATE_API_TOKEN, FAL_KEY, etc.) out of config.toml and out of git.
     Minimal on purpose — no python-dotenv dependency.
     """
     if not ENV_PATH.exists():
@@ -31,23 +33,9 @@ def _load_dotenv() -> None:
             os.environ[key] = value
 
 
-class LLMConfig(BaseModel):
-    provider: str = "openai"
-    api_key: str = ""
-    base_url: str = ""
-    model: str = "gpt-4o-mini"
-
-
 class VideoGenConfig(BaseModel):
-    provider: str = "none"
     api_key: str = ""
-    endpoint: str = "replicate"
-    max_ai_seconds: int = 6  # cap AI-gen seconds/video to protect COGS; rest = stock
-
-
-class StockConfig(BaseModel):
-    pexels_api_key: str = ""
-    pixabay_api_key: str = ""
+    endpoint: str = "replicate"  # "replicate" or "fal"
 
 
 class TTSConfig(BaseModel):
@@ -61,33 +49,20 @@ class SubtitleConfig(BaseModel):
     model_size: str = "large-v3"
 
 
-class DiscoveryConfig(BaseModel):
-    enabled: bool = False
-    niches: list[str] = []
-
-
-class AppConfig(BaseModel):
-    output_dir: str = "./storage/output"
-    work_dir: str = "./storage/work"
-    watermark: bool = True
-
-
 class Settings(BaseModel):
-    app: AppConfig = AppConfig()
-    llm: LLMConfig = LLMConfig()
     video_gen: VideoGenConfig = VideoGenConfig()
-    stock: StockConfig = StockConfig()
     tts: TTSConfig = TTSConfig()
     subtitles: SubtitleConfig = SubtitleConfig()
-    discovery: DiscoveryConfig = DiscoveryConfig()
 
 
 @lru_cache
 def get_settings() -> Settings:
     _load_dotenv()
-    if not CONFIG_PATH.exists():
-        # Fall back to defaults so the skeleton boots; real runs need config.toml.
-        return Settings()
-    with CONFIG_PATH.open("rb") as fh:
-        data = tomllib.load(fh)
-    return Settings(**data)
+    return Settings(
+        video_gen=VideoGenConfig(
+            api_key=os.environ.get("VIDEO_GEN_API_KEY", ""),
+            endpoint=os.environ.get("VIDEO_ENDPOINT", "replicate"),
+        ),
+        tts=TTSConfig(voice=os.environ.get("TTS_VOICE", "en-US-AriaNeural")),
+        subtitles=SubtitleConfig(model_size=os.environ.get("WHISPER_MODEL", "large-v3")),
+    )

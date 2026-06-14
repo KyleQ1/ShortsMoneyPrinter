@@ -1,9 +1,8 @@
-"""ShortsMoneyPrinter CLI.
+"""ShortsMoneyPrinter CLI — plan/run a remix, or serve the local web UI.
 
-    smp recreate <url> [--aspect 9:16] [--voice en-US-AriaNeural] [--out file.mp4]
+    smp run <url-or-path> [--live --max-cost 10]
+    smp serve
     smp version
-
-Phase-1 entry point (the desktop UI wraps this engine in Phase 2).
 """
 
 from __future__ import annotations
@@ -13,34 +12,9 @@ import logging
 import shutil
 import sys
 
-from app import __version__, store
-from app.models import AspectRatio, CreateRequest
-
-
-def _recreate(args: argparse.Namespace) -> int:
-    if shutil.which("ffmpeg") is None:
-        print("error: ffmpeg not found on PATH. Install it first.", file=sys.stderr)
-        return 2
-
-    request = CreateRequest(
-        source_url=args.url,
-        aspect=AspectRatio(args.aspect),
-        voice=args.voice,
-    )
-    job = store.create_job(request)
-    print(f"job {job.id}: recreating {args.url}")
-
-    from app.pipeline import run_pipeline  # deferred import keeps `smp version` cheap
-
-    job = run_pipeline(job.id)
-    if job.status.value == "done":
-        out = args.out or job.output_path
-        if args.out and job.output_path and args.out != job.output_path:
-            shutil.copyfile(job.output_path, args.out)
-        print(f"\n✅ done → {out}")
-        return 0
-    print(f"\n❌ failed: {job.error}", file=sys.stderr)
-    return 1
+from app import __version__
+from app.model_catalog import MODEL_CHOICES
+from app.models import AspectRatio
 
 
 def _test_seedance(args: argparse.Namespace) -> int:
@@ -49,7 +23,6 @@ def _test_seedance(args: argparse.Namespace) -> int:
     from pathlib import Path
 
     from app.config import get_settings
-    from app.models import AspectRatio
     from app.services import styles, video_conditioning
 
     work = Path("storage/work/seedance_test")
@@ -174,7 +147,7 @@ def _run(args: argparse.Namespace) -> int:
         max_cost=args.max_cost,
         captions=args.captions,
         max_total_seconds=args.max_total_seconds,
-        wan_command=args.wan_command,
+        local_command=args.local_command,
     )
     try:
         plan = create_plan(request)
@@ -255,9 +228,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument(
         "--quality",
         default="local",
-        choices=["budget", "standard", "premium", "local"],
-        help="local=Wan command, budget=Seedance 1.5 image-to-video, "
-        "standard=Seedance 2.0 Fast, premium=Seedance 2.0",
+        choices=list(MODEL_CHOICES),
+        help="model key from models.toml; default is local",
     )
     run.add_argument("--live", action="store_true", help="spend credits and generate video")
     run.add_argument("--max-cost", type=float, default=None, help="required for --live")
@@ -268,9 +240,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     run.add_argument("--max-total-seconds", type=float, default=None, help="cap source duration")
     run.add_argument(
-        "--wan-command",
+        "--local-command",
+        dest="local_command",
         default=None,
-        help="local mode command with {input} {keyframe} {prompt} {output} {index}",
+        help="local model command with {input} {keyframe} {prompt} {output} {index}",
     )
     run.set_defaults(func=_run)
 
@@ -282,13 +255,6 @@ def main(argv: list[str] | None = None) -> int:
     serve.set_defaults(func=_serve)
 
     sub.add_parser("runs", help="list recent local remix runs").set_defaults(func=_runs)
-
-    r = sub.add_parser("recreate", help="recreate a video from a URL")
-    r.add_argument("url", help="URL of the short to recreate")
-    r.add_argument("--aspect", default="9:16", choices=["9:16", "16:9", "1:1"])
-    r.add_argument("--voice", default=None, help="TTS voice (edge-tts), e.g. en-US-AriaNeural")
-    r.add_argument("--out", default=None, help="copy the final mp4 to this path")
-    r.set_defaults(func=_recreate)
 
     s = sub.add_parser("test-seedance", help="condition a video to Seedance limits, then test the API")
     s.add_argument("video", help="path to a local video file")

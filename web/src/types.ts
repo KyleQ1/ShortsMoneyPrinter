@@ -1,6 +1,7 @@
-export type Quality = "budget" | "standard" | "premium" | "local";
+export type Quality = string;
 export type Language = "auto" | "en" | "zh" | "hi" | "es" | "fr" | "de" | "ja" | "ko" | "pt";
 export type AudioMode = "source" | "tts" | "none";
+export type CaptionPosition = "bottom" | "center" | "top";
 export type RunStatus = "planned" | "running" | "done" | "failed";
 export type BlockStatus = "planned" | "generating" | "done" | "failed" | "skipped";
 
@@ -22,8 +23,9 @@ export type RemixRequest = {
   quality: Quality;
   max_cost: number;
   captions: boolean;
+  caption_position: CaptionPosition;
   max_total_seconds: number | null;
-  wan_command: string | null;
+  local_command: string | null;
 };
 
 export type BlockPlan = {
@@ -72,9 +74,10 @@ export type RunPlan = {
   aspect_ratio: string;
   has_audio: boolean;
   captions: boolean;
+  caption_position: CaptionPosition;
   captions_path: string | null;
   max_cost: number | null;
-  wan_command: string | null;
+  local_command: string | null;
   estimated_cost: number;
   block_count: number;
   blocks: BlockPlan[];
@@ -87,6 +90,7 @@ export type PreflightStatus = {
   ffprobe: boolean;
   yt_dlp: boolean;
   endpoint: string;
+  seedance2_cookie: boolean;
   replicate_token: boolean;
   replicate_package: boolean;
   fal_token: boolean;
@@ -94,7 +98,22 @@ export type PreflightStatus = {
 };
 
 export type ModelInfo = {
+  key: Quality;
+  quality: Quality;
+  provider_mode: "local" | "remote";
+  provider: string;
+  model_id: string;
+  label: string;
   title: string;
+  mode: string;
+  resolution: string;
+  input_kind: string;
+  default_for_mode: boolean;
+  recommended: boolean;
+  estimated_cost_per_second: number;
+  cost_per_second_image: number | null;
+  cost_per_second_video: number | null;
   detail: string;
   cost: string;
+  aliases: string[];
 };

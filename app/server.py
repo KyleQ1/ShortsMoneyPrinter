@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.model_catalog import MODEL_CHOICES, QUALITY_PROFILES
 from app.remix_runner import (
     RemixRequest,
     create_plan,
@@ -30,6 +31,14 @@ WEB_INDEX = WEB_DIST / "index.html"
 
 class StartRequest(BaseModel):
     max_cost: float = Field(gt=0)
+
+
+# Tracks runs with a live worker so a second start can't race on the same files.
+_active_runs: set[str] = set()
+_active_lock = threading.Lock()
+
+# Close an idle event stream after this many seconds with no plan changes.
+_STREAM_IDLE_TIMEOUT = 1800
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -113,11 +122,19 @@ def api_start(run_id: str, request: StartRequest):
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    with _active_lock:
+        if run_id in _active_runs:
+            raise HTTPException(status_code=409, detail="run already in progress")
+        _active_runs.add(run_id)
+
     def _worker() -> None:
         try:
             run_live(run_id, request.max_cost)
         except Exception:
             pass
+        finally:
+            with _active_lock:
+                _active_runs.discard(run_id)
 
     thread = threading.Thread(target=_worker, daemon=True)
     thread.start()
@@ -136,17 +153,30 @@ def api_get_run(run_id: str):
 def api_events(run_id: str):
     def stream():
         last = ""
+        idle = 0
         while True:
             try:
                 plan = load_plan(run_id)
             except FileNotFoundError:
                 yield "event: error\ndata: unknown run\n\n"
                 return
+            except Exception:
+                yield "event: error\ndata: could not read run state\n\n"
+                return
             payload = plan.model_dump_json()
             if payload != last:
                 yield f"data: {payload}\n\n"
                 last = payload
+                idle = 0
+            else:
+                # Comment line: keeps proxies alive and surfaces client disconnects
+                # (the next yield raises GeneratorExit once the browser is gone).
+                yield ": keepalive\n\n"
+                idle += 1
             if plan.status in {"done", "failed"}:
+                return
+            if idle >= _STREAM_IDLE_TIMEOUT:
+                yield "event: error\ndata: stream timed out\n\n"
                 return
             time.sleep(1.0)
 
@@ -164,6 +194,17 @@ def api_final(run_id: str):
     return FileResponse(plan.final_path, media_type="video/mp4", filename=f"{run_id}.mp4")
 
 
+@app.get("/api/runs/{run_id}/source.mp4")
+def api_source(run_id: str):
+    try:
+        plan = load_plan(run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not plan.source_path or not Path(plan.source_path).exists():
+        raise HTTPException(status_code=404, detail="source video is not ready")
+    return FileResponse(plan.source_path, media_type="video/mp4", filename=f"{run_id}-source.mp4")
+
+
 @app.get("/api/runs")
 def api_list_runs():
     return list_runs()
@@ -172,6 +213,11 @@ def api_list_runs():
 @app.get("/api/preflight")
 def api_preflight():
     return preflight_status()
+
+
+@app.get("/api/models")
+def api_models():
+    return [QUALITY_PROFILES[key].to_api() for key in MODEL_CHOICES]
 
 
 @app.get("/api/styles")

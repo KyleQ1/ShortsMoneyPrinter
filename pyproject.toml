@@ -1,16 +1,15 @@
 [project]
 name = "shorts-money-printer"
 version = "0.1.0"
-description = "Recreate a winning short-form video with AI and export it locally."
+description = "Local-first AI video remix engine: turn any short into an AI-generated version."
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.9",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "httpx>=0.27",
-    "yt-dlp>=2025.1.1",        # ingest source metadata + transcript (analysis only)
-    "openai>=1.50",            # OpenAI-compatible LLM client (also Ollama/DeepSeek/etc.)
-    "edge-tts>=7.0",           # free default voice (no key)
+    "yt-dlp>=2025.1.1",        # download the source video from a URL
+    "edge-tts>=7.0",           # free default TTS voice (no key)
     "faster-whisper>=1.0",     # word-level caption timing (CPU int8 by default)
 ]
 

@@ -1,0 +1,92 @@
+# Built-in model catalog for the API, CLI, and browser UI.
+# Add new models here, then add provider code only when the model cannot use the
+# generic local command path or an existing remote provider path.
+
+[[models]]
+key = "local"
+provider_mode = "local"
+provider = "local"
+model_id = "ltx-video"
+label = "LTX Video"
+mode = "local-video-conditioning"
+resolution = "local"
+input_kind = "local-command"
+default_for_mode = true
+estimated_cost_per_second = 0
+detail = "Default local video remix model. Uses your installed LTX Video runner with the prepared source reference clip and keyframe."
+cost_note = ""
+
+[[models]]
+key = "hunyuan"
+provider_mode = "local"
+provider = "local"
+model_id = "hunyuanvideo-1.5"
+label = "HunyuanVideo 1.5"
+mode = "local-i2v"
+resolution = "local"
+input_kind = "local-command"
+estimated_cost_per_second = 0
+detail = "Local high-quality path. Upstream lists 14GB VRAM minimum with offload; 24GB+ NVIDIA GPUs are the practical target."
+cost_note = "$0 provider cost inside this app. Your local hardware, electricity, and setup time still apply."
+
+[[models]]
+key = "wan"
+provider_mode = "local"
+provider = "local"
+model_id = "wan-2.2-ti2v-5b"
+label = "Wan 2.2 TI2V-5B"
+mode = "local-ti2v"
+resolution = "local"
+input_kind = "local-command"
+estimated_cost_per_second = 0
+detail = "Local text/image-to-video path. Wan's 5B model targets 720p and is documented around 4090-class consumer GPUs."
+cost_note = "$0 provider cost inside this app. Your local hardware, electricity, and setup time still apply."
+
+[[models]]
+key = "seedance-2.0-fast"
+aliases = ["standard"]
+provider_mode = "remote"
+provider = "replicate"
+model_id = "bytedance/seedance-2.0-fast"
+label = "Replicate Seedance 2.0 Fast"
+mode = "video-to-video"
+resolution = "480p"
+input_kind = "video"
+default_for_mode = true
+recommended = true
+estimated_cost_per_second = 0.08
+cost_per_second_image = 0.04
+cost_per_second_video = 0.08
+detail = "BYO Replicate key required. 480p video-to-video. Default for faithful source motion and fastest paid cloud mode."
+cost_note = "Estimated at $0.08/sec with video reference input. Image/keyframe input is listed separately at $0.04/sec."
+
+[[models]]
+key = "seedance-2.0"
+aliases = ["premium"]
+provider_mode = "remote"
+provider = "replicate"
+model_id = "bytedance/seedance-2.0"
+label = "Replicate Seedance 2.0"
+mode = "video-to-video"
+resolution = "720p"
+input_kind = "video"
+estimated_cost_per_second = 0.22
+cost_per_second_image = 0.11
+cost_per_second_video = 0.22
+detail = "BYO Replicate key required. 720p video-to-video. Highest cloud quality and most expensive option."
+cost_note = "Estimated at $0.22/sec with video reference input. Image/keyframe input is listed separately at $0.11/sec."
+
+[[models]]
+key = "seedance-1.5-pro"
+aliases = ["budget"]
+provider_mode = "remote"
+provider = "replicate"
+model_id = "bytedance/seedance-1.5-pro"
+label = "Replicate Seedance 1.5 Pro"
+mode = "image-to-video"
+resolution = "480p"
+input_kind = "image"
+estimated_cost_per_second = 0.013
+cost_per_second_image = 0.013
+detail = "BYO Replicate key required. 480p image-to-video from a keyframe. It does not take direct video input, so source motion may be less faithful."
+cost_note = "$0.013/sec for image/keyframe input without generated audio. Around $0.13 for 10s or $0.39 for 30s."

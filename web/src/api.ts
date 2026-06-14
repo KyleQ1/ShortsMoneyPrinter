@@ -1,4 +1,4 @@
-import type { PreflightStatus, RemixRequest, RunPlan, StyleOption } from "./types";
+import type { ModelInfo, PreflightStatus, RemixRequest, RunPlan, StyleOption } from "./types";
 
 async function requestJson<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, options);
@@ -21,6 +21,10 @@ export function getStyles(): Promise<StyleOption[]> {
 
 export function getPreflight(): Promise<PreflightStatus> {
   return requestJson<PreflightStatus>("/api/preflight");
+}
+
+export function getModels(): Promise<ModelInfo[]> {
+  return requestJson<ModelInfo[]>("/api/models");
 }
 
 export function listRuns(): Promise<RunPlan[]> {

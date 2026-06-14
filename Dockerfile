@@ -1,4 +1,4 @@
-# Optional Linux/dev image (the primary distribution is the .exe/.dmg desktop app).
+# Linux/dev image for running ShortsMoneyPrinter (CLI + web server).
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -10,5 +10,5 @@ COPY pyproject.toml ./
 RUN pip install --no-cache-dir -e .
 COPY . .
 
-ENTRYPOINT ["omp"]
+ENTRYPOINT ["smp"]
 CMD ["--help"]
