@@ -4,28 +4,26 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Deep studio backdrop
-        canvas: "#080a0f",
+        // Light app backdrop
+        canvas: "#f6f7fb",
         night: "#0a0c12",
-        // Elevated glass surfaces
-        surface: "#11141d",
-        "surface-2": "#161a25",
-        "surface-3": "#1c2130",
-        // Hairlines
-        line: "#262b39",
-        "line-strong": "#333a4d",
+        surface: "#ffffff",
+        "surface-2": "#f8fafc",
+        "surface-3": "#eef2f7",
+        line: "#e2e8f0",
+        "line-strong": "#cbd5e1",
         // Text
-        ink: "#eef1f6",
-        muted: "#9aa3b6",
-        faint: "#646d82",
-        // Brand: emerald/teal "money" gradient
-        accent: "#2dd4bf",
-        "accent-strong": "#10b981",
-        "accent-soft": "#0c3b36",
+        ink: "#172033",
+        muted: "#64748b",
+        faint: "#94a3b8",
+        // Brand accent
+        accent: "#2563eb",
+        "accent-strong": "#1d4ed8",
+        "accent-soft": "#dbeafe",
         // Semantic
-        danger: "#f87171",
-        warning: "#fbbf24",
-        success: "#34d399",
+        danger: "#dc2626",
+        warning: "#d97706",
+        success: "#059669",
       },
       fontFamily: {
         sans: [
@@ -46,12 +44,12 @@ export default {
         ],
       },
       boxShadow: {
-        panel: "0 1px 0 rgba(255,255,255,0.02) inset, 0 12px 32px -16px rgba(0,0,0,0.7)",
-        glow: "0 0 0 1px rgba(45,212,191,0.25), 0 8px 30px -8px rgba(16,185,129,0.45)",
-        "glow-soft": "0 8px 40px -12px rgba(16,185,129,0.35)",
+        panel: "0 1px 2px rgba(15,23,42,0.04), 0 16px 36px -26px rgba(15,23,42,0.28)",
+        glow: "0 8px 24px -12px rgba(37,99,235,0.55)",
+        "glow-soft": "0 8px 24px -18px rgba(37,99,235,0.45)",
       },
       backgroundImage: {
-        "accent-gradient": "linear-gradient(135deg, #34d399 0%, #14b8a6 100%)",
+        "accent-gradient": "linear-gradient(135deg, #2563eb 0%, #0f766e 100%)",
       },
       keyframes: {
         "fade-up": {
@@ -66,9 +64,9 @@ export default {
           "100%": { transform: "translateX(100%)" },
         },
         "pulse-ring": {
-          "0%": { boxShadow: "0 0 0 0 rgba(45,212,191,0.5)" },
-          "70%": { boxShadow: "0 0 0 8px rgba(45,212,191,0)" },
-          "100%": { boxShadow: "0 0 0 0 rgba(45,212,191,0)" },
+          "0%": { boxShadow: "0 0 0 0 rgba(37,99,235,0.35)" },
+          "70%": { boxShadow: "0 0 0 8px rgba(37,99,235,0)" },
+          "100%": { boxShadow: "0 0 0 0 rgba(37,99,235,0)" },
         },
       },
       animation: {

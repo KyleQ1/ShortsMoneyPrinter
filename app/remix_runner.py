@@ -25,11 +25,11 @@ from pydantic import BaseModel, Field
 from app.config import get_settings
 from app.model_catalog import QUALITY_PROFILES, QualityProfile
 from app.models import AspectRatio
-from app.services import styles, video_conditioning as vc
+from app.services import prompt_writer, styles, video_conditioning as vc
 
 Quality = str
 Language = Literal["auto", "en", "zh", "hi", "es", "fr", "de", "ja", "ko", "pt"]
-AudioMode = Literal["source", "tts", "none"]
+AudioMode = Literal["source", "tts", "none", "upload"]
 CaptionPosition = Literal["bottom", "center", "top"]
 BlockStatus = Literal["planned", "generating", "done", "failed", "skipped"]
 RunStatus = Literal["planned", "running", "done", "failed"]
@@ -57,7 +57,7 @@ class CommandError(RuntimeError):
 
 
 class RemixRequest(BaseModel):
-    source: str
+    source: str = ""
     style: str = styles.DEFAULT_STYLE
     prompt: str | None = None
     video_subject_prompt: str | None = None
@@ -71,6 +71,14 @@ class RemixRequest(BaseModel):
     caption_position: CaptionPosition = "bottom"
     max_total_seconds: float | None = None
     local_command: str | None = None
+    # Advanced overrides / inputs
+    resolution: str | None = None          # "480p" | "720p" | "1080p"; None = model default
+    aspect_ratio: str | None = None        # "9:16" | "16:9" | "1:1"; None = from source
+    image_path: str | None = None          # uploaded still -> image-to-video (single block)
+    audio_upload: str | None = None        # uploaded soundtrack (audio_mode = "upload")
+    prompt_enhance: bool = False           # opt-in LLM rewrite for block prompts
+    prompt_api_key: str | None = None      # request-scoped; never stored in plan.json
+    prompt_model: str | None = None
 
 
 class BlockPlan(BaseModel):
@@ -125,6 +133,7 @@ class RunPlan(BaseModel):
     duration: float
     aspect_ratio: str = "9:16"
     has_audio: bool
+    is_image_to_video: bool = False
     captions: bool = False
     caption_position: CaptionPosition = "bottom"
     captions_path: str | None = None
@@ -153,7 +162,11 @@ class SeedanceProvider(RemixProvider):
         if profile.provider == "local":
             return _run_local_model(plan, block)
 
+        resolution = plan.resolution or profile.resolution
+        aspect = _aspect_enum(plan.aspect_ratio)
         duration = str(max(4, min(15, math.ceil(block.duration))))
+        from_image = plan.is_image_to_video or profile.input_kind == "image"
+
         if _remote_endpoint() == "seedance2":
             from app.services.providers import seedance2
 
@@ -161,31 +174,31 @@ class SeedanceProvider(RemixProvider):
                 block.keyframe,
                 block.prompt,
                 out_path,
-                AspectRatio.VERTICAL,
-                resolution=profile.resolution,
+                aspect,
+                resolution=resolution,
                 duration=duration,
                 model_key=plan.quality,
             )
 
         from app.services.providers import seedance
 
-        style = styles.get(plan.style)
-        if profile.input_kind == "image":
+        if from_image:
             return seedance.generate_from_image(
                 block.keyframe,
                 block.prompt,
                 out_path,
-                AspectRatio.VERTICAL,
-                resolution=profile.resolution,
+                aspect,
+                resolution=resolution,
                 duration=duration,
             )
 
+        style = styles.get(plan.style)
         return seedance.generate_from_video(
             block.ref_video,
             block.prompt,
             out_path,
-            AspectRatio.VERTICAL,
-            resolution=profile.resolution,
+            aspect,
+            resolution=resolution,
             duration=duration,
             generate_audio=False,
             match_reference=style.match_reference,
@@ -211,6 +224,7 @@ def preflight_status() -> dict[str, object]:
         "replicate_package": bool(importlib.util.find_spec("replicate")),
         "fal_token": bool(cfg.api_key or os.environ.get("FAL_KEY")),
         "fal_package": bool(importlib.util.find_spec("fal_client")),
+        "prompt_api_key": prompt_writer.configured(),
     }
 
 
@@ -239,12 +253,16 @@ def _quality_profile(quality: str) -> QualityProfile:
 def create_plan(request: RemixRequest, runs_dir: Path = RUNS_DIR) -> RunPlan:
     """Create a dry-run plan and stop before provider calls."""
     _require_media_tools()
+    if request.image_path:
+        return _create_image_plan(request, runs_dir)
     if not request.source.strip():
         raise ValueError("Enter a YouTube, Instagram, TikTok URL or local video path.")
     if request.max_total_seconds is not None and request.max_total_seconds <= 0:
         raise ValueError("max_total_seconds must be greater than 0.")
     styles.get(request.style)
     profile = _quality_profile(request.quality)
+    resolution = request.resolution or profile.resolution
+    override_dims = _ASPECT_DIMS.get(request.aspect_ratio or "")
     run_id = _new_run_id()
     run_dir = runs_dir / run_id
     source_dir = run_dir / "source"
@@ -291,7 +309,7 @@ def create_plan(request: RemixRequest, runs_dir: Path = RUNS_DIR) -> RunPlan:
         prompt_path = str(prompts_dir / f"block_{index:03d}.txt")
         generated_path = str(generated_dir / f"block_{index:03d}.mp4")
         try:
-            _encode_reference_block(source_path, ref_video, start, length)
+            _encode_reference_block(source_path, ref_video, start, length, dims=override_dims)
             _extract_keyframe(source_path, keyframe, start + (length / 2.0))
         except CommandError as exc:
             raise UserFacingError(
@@ -307,6 +325,9 @@ def create_plan(request: RemixRequest, runs_dir: Path = RUNS_DIR) -> RunPlan:
             request.video_subject_prompt,
             request.video_script_prompt,
             request.language,
+            enhance=request.prompt_enhance,
+            prompt_api_key=request.prompt_api_key,
+            prompt_model=request.prompt_model,
         )
         Path(prompt_path).write_text(prompt + "\n", encoding="utf-8")
         block_models.append(
@@ -347,12 +368,12 @@ def create_plan(request: RemixRequest, runs_dir: Path = RUNS_DIR) -> RunPlan:
         model_id=profile.model_id,
         model_label=profile.model_label,
         mode=profile.mode,
-        resolution=profile.resolution,
-        width=width,
-        height=height,
+        resolution=resolution,
+        width=override_dims[0] if override_dims else width,
+        height=override_dims[1] if override_dims else height,
         original_duration=round(original_duration, 3),
         duration=round(duration, 3),
-        aspect_ratio=metadata.aspect_ratio or _aspect_label(width, height),
+        aspect_ratio=request.aspect_ratio or metadata.aspect_ratio or _aspect_label(width, height),
         has_audio=has_audio,
         captions=request.captions,
         caption_position=request.caption_position,
@@ -361,6 +382,116 @@ def create_plan(request: RemixRequest, runs_dir: Path = RUNS_DIR) -> RunPlan:
         estimated_cost=estimated_cost,
         block_count=len(block_models),
         blocks=block_models,
+    )
+    save_plan(plan)
+    return plan
+
+
+def _create_image_plan(request: RemixRequest, runs_dir: Path) -> RunPlan:
+    """Single-block image-to-video plan built from an uploaded still image."""
+    image_path = (request.image_path or "").strip()
+    if not image_path or not Path(image_path).is_file():
+        raise UserFacingError("Upload an image to use image-to-video mode.")
+    if request.max_total_seconds is not None and request.max_total_seconds <= 0:
+        raise ValueError("max_total_seconds must be greater than 0.")
+    styles.get(request.style)
+    profile = _quality_profile(request.quality)
+    resolution = request.resolution or profile.resolution
+
+    run_id = _new_run_id()
+    run_dir = runs_dir / run_id
+    source_dir = run_dir / "source"
+    audio_dir = run_dir / "audio"
+    blocks_dir = run_dir / "blocks"
+    prompts_dir = run_dir / "prompts"
+    generated_dir = run_dir / "generated"
+    for directory in (source_dir, audio_dir, blocks_dir, prompts_dir, generated_dir):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    ext = Path(image_path).suffix.lower() or ".jpg"
+    keyframe = str(blocks_dir / f"block_000_keyframe{ext}")
+    source_copy = str(source_dir / f"image{ext}")
+    shutil.copyfile(image_path, keyframe)
+    shutil.copyfile(image_path, source_copy)
+
+    if request.aspect_ratio in _ASPECT_DIMS:
+        width, height = _ASPECT_DIMS[request.aspect_ratio]
+        aspect = request.aspect_ratio
+    else:
+        iw, ih = _probe_dims(keyframe)
+        width, height = vc.target_dims(iw, ih)
+        aspect = _aspect_label(width, height)
+
+    duration = float(request.max_total_seconds or DEFAULT_IMAGE_SECONDS)
+    duration = max(1.0, min(float(MAX_BLOCK_SECONDS), duration))
+
+    audio_path = _prepare_audio(request, audio_dir, None)
+
+    prompt = generate_prompt(
+        0,
+        0.0,
+        duration,
+        request.style,
+        request.prompt,
+        request.video_subject_prompt,
+        request.video_script_prompt,
+        request.language,
+        enhance=request.prompt_enhance,
+        prompt_api_key=request.prompt_api_key,
+        prompt_model=request.prompt_model,
+    )
+    prompt_path = str(prompts_dir / "block_000.txt")
+    Path(prompt_path).write_text(prompt + "\n", encoding="utf-8")
+    generated_path = str(generated_dir / "block_000.mp4")
+    block = BlockPlan(
+        index=0,
+        start=0.0,
+        end=round(duration, 3),
+        duration=round(duration, 3),
+        mode=profile.mode,
+        ref_video="",
+        keyframe=keyframe,
+        prompt_path=prompt_path,
+        prompt=prompt,
+        generated_path=generated_path,
+        estimated_cost=round(duration * profile.cost_per_second(), 2),
+    )
+    plan = RunPlan(
+        run_id=run_id,
+        created_at=datetime.now(UTC).isoformat(),
+        source=image_path,
+        source_platform="image",
+        source_title=Path(image_path).name,
+        source_path=source_copy,
+        audio_path=audio_path,
+        run_dir=str(run_dir),
+        style=request.style,
+        user_prompt=request.prompt.strip() if request.prompt else None,
+        video_subject_prompt=request.video_subject_prompt.strip() if request.video_subject_prompt else None,
+        video_script_prompt=request.video_script_prompt.strip() if request.video_script_prompt else None,
+        language=request.language,
+        audio_mode=request.audio_mode,
+        tts_voice=request.tts_voice.strip() if request.tts_voice else None,
+        quality=request.quality,
+        provider=profile.provider,
+        model_id=profile.model_id,
+        model_label=profile.model_label,
+        mode=profile.mode,
+        resolution=resolution,
+        width=width,
+        height=height,
+        original_duration=round(duration, 3),
+        duration=round(duration, 3),
+        aspect_ratio=aspect,
+        has_audio=bool(audio_path),
+        is_image_to_video=True,
+        captions=request.captions,
+        caption_position=request.caption_position,
+        max_cost=request.max_cost,
+        local_command=_local_command_from_request(request),
+        estimated_cost=round(duration * profile.cost_per_second(), 2),
+        block_count=1,
+        blocks=[block],
     )
     save_plan(plan)
     return plan
@@ -461,6 +592,9 @@ def generate_prompt(
     subject_prompt: str | None = None,
     script_prompt: str | None = None,
     language: Language = "auto",
+    enhance: bool = False,
+    prompt_api_key: str | None = None,
+    prompt_model: str | None = None,
 ) -> str:
     """Deterministic prompt; no LLM key is required for the MVP."""
     base = (
@@ -477,7 +611,17 @@ def generate_prompt(
         base = f"{base} Script/narration direction: {script_prompt.strip()}"
     if user_prompt and user_prompt.strip():
         base = f"{base} User direction: {user_prompt.strip()}"
-    return styles.apply(base, style)
+    prompt = styles.apply(base, style)
+    if not enhance:
+        return prompt
+    try:
+        return prompt_writer.refine_prompt(
+            prompt,
+            api_key=prompt_api_key,
+            model=prompt_model,
+        )
+    except prompt_writer.PromptWriterError as exc:
+        raise UserFacingError(str(exc)) from exc
 
 
 def _prepare_audio(request: RemixRequest, audio_dir: Path, source_audio_path: str | None) -> str | None:
@@ -492,6 +636,11 @@ def _prepare_audio(request: RemixRequest, audio_dir: Path, source_audio_path: st
 
         tts_path = str(audio_dir / "tts.mp3")
         return tts.synthesize(request.video_script_prompt, request.tts_voice, tts_path)
+    if request.audio_mode == "upload":
+        upload = (request.audio_upload or "").strip()
+        if not upload or not Path(upload).is_file():
+            raise UserFacingError("Upload-audio mode requires an uploaded audio file.")
+        return upload
     raise ValueError(f"unknown audio mode: {request.audio_mode}")
 
 
@@ -746,6 +895,19 @@ def _aspect_label(width: int, height: int) -> str:
     return "9:16" if height > width else "16:9"
 
 
+DEFAULT_IMAGE_SECONDS = 5.0
+# Target frame for an explicit aspect override (kept under the provider pixel ceiling).
+_ASPECT_DIMS = {"9:16": (720, 1280), "16:9": (1280, 720), "1:1": (960, 960)}
+
+
+def _aspect_enum(aspect: str | None) -> AspectRatio:
+    return {
+        "9:16": AspectRatio.VERTICAL,
+        "16:9": AspectRatio.HORIZONTAL,
+        "1:1": AspectRatio.SQUARE,
+    }.get(aspect or "", AspectRatio.VERTICAL)
+
+
 def _has_audio(path: str) -> bool:
     proc = subprocess.run(
         [
@@ -849,9 +1011,20 @@ def _plan_blocks(source: str, duration: float) -> list[tuple[float, float]]:
     return vc.plan_segments(cuts, duration, min_seconds=vc.MIN_SECONDS, max_seconds=MAX_BLOCK_SECONDS)
 
 
-def _encode_reference_block(source: str, dest: str, start: float, length: float) -> None:
-    iw, ih, _ = vc.probe(source)
-    width, height = vc.target_dims(iw, ih)
+def _encode_reference_block(
+    source: str, dest: str, start: float, length: float, dims: tuple[int, int] | None = None
+) -> None:
+    if dims is not None:
+        width, height = dims
+        # Fit-and-pad into the chosen aspect so the reference matches the requested frame.
+        scale_filter = (
+            f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
+        )
+    else:
+        iw, ih, _ = vc.probe(source)
+        width, height = vc.target_dims(iw, ih)
+        scale_filter = f"scale={width}:{height}"
     _run(
         [
             "ffmpeg",
@@ -866,7 +1039,7 @@ def _encode_reference_block(source: str, dest: str, start: float, length: float)
             f"{length:.3f}",
             "-an",
             "-vf",
-            f"scale={width}:{height}",
+            scale_filter,
             "-r",
             "30",
             "-c:v",

@@ -7,6 +7,7 @@ dependencies = [
     "pydantic>=2.9",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",  # multipart file uploads for the web UI
     "httpx>=0.27",
     "yt-dlp>=2025.1.1",        # download the source video from a URL
     "edge-tts>=7.0",           # free default TTS voice (no key)

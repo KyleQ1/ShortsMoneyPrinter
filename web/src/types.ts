@@ -1,6 +1,6 @@
 export type Quality = string;
 export type Language = "auto" | "en" | "zh" | "hi" | "es" | "fr" | "de" | "ja" | "ko" | "pt";
-export type AudioMode = "source" | "tts" | "none";
+export type AudioMode = "source" | "tts" | "none" | "upload";
 export type CaptionPosition = "bottom" | "center" | "top";
 export type RunStatus = "planned" | "running" | "done" | "failed";
 export type BlockStatus = "planned" | "generating" | "done" | "failed" | "skipped";
@@ -8,7 +8,28 @@ export type BlockStatus = "planned" | "generating" | "done" | "failed" | "skippe
 export type StyleOption = {
   key: string;
   label: string;
+  prompt: string;
+  match_reference: boolean;
   kids: boolean;
+  builtin: boolean;
+  custom: boolean;
+  overridden: boolean;
+};
+
+export type StyleInput = {
+  key?: string;
+  label: string;
+  prompt: string;
+  match_reference: boolean;
+  kids: boolean;
+};
+
+export type UploadResult = {
+  id: string;
+  kind: string;
+  name: string;
+  path: string;
+  url: string;
 };
 
 export type RemixRequest = {
@@ -26,6 +47,13 @@ export type RemixRequest = {
   caption_position: CaptionPosition;
   max_total_seconds: number | null;
   local_command: string | null;
+  resolution: string | null;
+  aspect_ratio: string | null;
+  image_path: string | null;
+  audio_upload: string | null;
+  prompt_enhance: boolean;
+  prompt_api_key: string | null;
+  prompt_model: string | null;
 };
 
 export type BlockPlan = {
@@ -73,6 +101,7 @@ export type RunPlan = {
   duration: number;
   aspect_ratio: string;
   has_audio: boolean;
+  is_image_to_video: boolean;
   captions: boolean;
   caption_position: CaptionPosition;
   captions_path: string | null;
@@ -95,6 +124,7 @@ export type PreflightStatus = {
   replicate_package: boolean;
   fal_token: boolean;
   fal_package: boolean;
+  prompt_api_key: boolean;
 };
 
 export type ModelInfo = {

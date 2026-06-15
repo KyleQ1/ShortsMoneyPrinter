@@ -4,7 +4,7 @@ const REPO_URL = "https://github.com/";
 
 export function Header() {
   return (
-    <header className="sticky top-0 z-30 border-b border-line/70 bg-night/70 backdrop-blur-xl">
+    <header className="sticky top-0 z-30 border-b border-line/70 bg-surface/90 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <div className="flex items-center gap-3">
           <Logo />
@@ -18,7 +18,7 @@ export function Header() {
 
         <div className="flex items-center gap-2">
           <span className="hidden items-center gap-1.5 rounded-full border border-accent/30 bg-accent-soft/40 px-3 py-1 text-xs font-semibold text-accent sm:inline-flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_rgba(45,212,191,0.9)]" />
+            <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_rgba(37,99,235,0.45)]" />
             Local first
           </span>
           <a

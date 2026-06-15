@@ -44,6 +44,12 @@ class TTSConfig(BaseModel):
     voice: str = "en-US-AriaNeural"
 
 
+class PromptConfig(BaseModel):
+    api_key: str = ""
+    endpoint: str = "https://api.openai.com/v1"
+    model: str = "gpt-4o-mini"
+
+
 class SubtitleConfig(BaseModel):
     provider: str = "whisper"
     model_size: str = "large-v3"
@@ -52,6 +58,7 @@ class SubtitleConfig(BaseModel):
 class Settings(BaseModel):
     video_gen: VideoGenConfig = VideoGenConfig()
     tts: TTSConfig = TTSConfig()
+    prompts: PromptConfig = PromptConfig()
     subtitles: SubtitleConfig = SubtitleConfig()
 
 
@@ -64,5 +71,10 @@ def get_settings() -> Settings:
             endpoint=os.environ.get("VIDEO_ENDPOINT", "replicate"),
         ),
         tts=TTSConfig(voice=os.environ.get("TTS_VOICE", "en-US-AriaNeural")),
+        prompts=PromptConfig(
+            api_key=os.environ.get("PROMPT_API_KEY", ""),
+            endpoint=os.environ.get("PROMPT_API_BASE", "https://api.openai.com/v1"),
+            model=os.environ.get("PROMPT_MODEL", "gpt-4o-mini"),
+        ),
         subtitles=SubtitleConfig(model_size=os.environ.get("WHISPER_MODEL", "large-v3")),
     )

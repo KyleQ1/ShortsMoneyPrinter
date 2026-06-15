@@ -43,7 +43,7 @@ export function RecentRuns({
               className={classNames(
                 "rounded-full border px-3 py-1 text-xs font-semibold transition",
                 filter === key
-                  ? "border-transparent bg-accent-gradient text-night"
+                  ? "border-transparent bg-accent-gradient text-white"
                   : "border-line bg-surface-2/60 text-muted hover:border-accent/50 hover:text-accent",
               )}
               onClick={() => setFilter(key)}

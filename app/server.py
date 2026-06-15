@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import shutil
 import threading
 import time
+import uuid
+import mimetypes
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -27,6 +30,13 @@ app = FastAPI(title="ShortsMoneyPrinter", version="0.1.0")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WEB_DIST = PROJECT_ROOT / "web" / "dist"
 WEB_INDEX = WEB_DIST / "index.html"
+UPLOADS_DIR = PROJECT_ROOT / "storage" / "uploads"
+
+UPLOAD_EXTENSIONS = {
+    "video": {".mp4", ".mov", ".webm", ".mkv", ".m4v"},
+    "image": {".jpg", ".jpeg", ".png", ".webp"},
+    "audio": {".mp3", ".m4a", ".wav", ".aac", ".ogg", ".flac"},
+}
 
 
 class StartRequest(BaseModel):
@@ -202,7 +212,8 @@ def api_source(run_id: str):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if not plan.source_path or not Path(plan.source_path).exists():
         raise HTTPException(status_code=404, detail="source video is not ready")
-    return FileResponse(plan.source_path, media_type="video/mp4", filename=f"{run_id}-source.mp4")
+    media_type = mimetypes.guess_type(plan.source_path)[0] or "application/octet-stream"
+    return FileResponse(plan.source_path, media_type=media_type, filename=Path(plan.source_path).name)
 
 
 @app.get("/api/runs")
@@ -222,10 +233,88 @@ def api_models():
 
 @app.get("/api/styles")
 def api_styles():
-    return [
-        {"key": key, "label": styles.get(key).label, "kids": styles.get(key).kids}
-        for key in styles.keys()
-    ]
+    return [styles.to_dict(style) for style in styles.all_styles()]
+
+
+class StyleBody(BaseModel):
+    key: str | None = None
+    label: str
+    prompt: str = ""
+    match_reference: bool = True
+    kids: bool = False
+
+
+@app.post("/api/styles")
+def api_save_style(body: StyleBody):
+    try:
+        style = styles.save_style(
+            body.label,
+            body.prompt,
+            key=body.key,
+            match_reference=body.match_reference,
+            kids=body.kids,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return styles.to_dict(style)
+
+
+@app.post("/api/styles/reset")
+def api_reset_styles():
+    styles.reset_all()
+    return [styles.to_dict(style) for style in styles.all_styles()]
+
+
+@app.post("/api/styles/{key}/reset")
+def api_reset_style(key: str):
+    try:
+        return styles.to_dict(styles.reset_style(key))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/api/styles/{key}")
+def api_delete_style(key: str):
+    try:
+        styles.delete_style(key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"deleted": key}
+
+
+@app.post("/api/uploads")
+async def api_upload(kind: str = Form(...), file: UploadFile = File(...)):
+    if kind not in UPLOAD_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="kind must be video, image, or audio")
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in UPLOAD_EXTENSIONS[kind]:
+        allowed = ", ".join(sorted(UPLOAD_EXTENSIONS[kind]))
+        raise HTTPException(status_code=400, detail=f"{kind} must be one of: {allowed}")
+
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    upload_id = f"{uuid.uuid4().hex}{ext}"
+    dest = UPLOADS_DIR / upload_id
+    try:
+        with dest.open("wb") as out:
+            shutil.copyfileobj(file.file, out)
+    finally:
+        await file.close()
+
+    return {
+        "id": upload_id,
+        "kind": kind,
+        "name": file.filename,
+        "path": str(dest.resolve()),
+        "url": f"/api/uploads/{upload_id}",
+    }
+
+
+@app.get("/api/uploads/{upload_id}")
+def api_get_upload(upload_id: str):
+    asset = (UPLOADS_DIR / upload_id).resolve()
+    if UPLOADS_DIR.resolve() not in asset.parents or not asset.is_file():
+        raise HTTPException(status_code=404, detail="upload not found")
+    return FileResponse(asset)
 
 
 @app.get("/{path:path}", response_model=None)

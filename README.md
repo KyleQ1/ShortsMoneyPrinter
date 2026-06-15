@@ -58,9 +58,10 @@ _Demo video and before/after screenshots land here after the first validated liv
 - Use local LTX Video generation by default.
 - Switch local runs to HunyuanVideo 1.5 or Wan 2.2 when those fit your GPU.
 - Switch to BYO Replicate for direct cloud Seedance generation.
-- Add optional subject and script prompts.
+- Choose a style preset, edit the visual prompt, and save custom styles.
+- Optionally use a BYO prompt API key to rewrite block prompts.
 - Auto-detect language or target Chinese, Hindi, English, and more.
-- Keep original audio, generate TTS narration, or export silent video.
+- Keep original audio, upload a soundtrack, or export silent video in the Web UI.
 - Preserve original source audio when possible.
 - Generate block prompts without needing an LLM key.
 - Resume runs by skipping completed generated blocks.
@@ -76,11 +77,12 @@ _Demo video and before/after screenshots land here after the first validated liv
 | <=15 second model block splitting | Works |
 | Reference clip, keyframe, and audio extraction | Works |
 | Deterministic prompt generation | Works |
+| Optional AI prompt writer | Works, BYO OpenAI-compatible key |
 | Cost estimate before provider calls | Works |
-| Optional subject prompt | Works |
-| Optional script prompt | Works |
+| Custom style presets | Works |
 | Language auto-detect / target language | Works |
-| Source audio, TTS, or no audio | Works |
+| Source audio, uploaded audio, or no audio | Works in Web UI |
+| TTS narration | CLI/API only |
 | Local LTX Video command generation | Default |
 | Local HunyuanVideo 1.5 command generation | Works |
 | Local Wan 2.2 command generation | Works |
@@ -291,8 +293,9 @@ CPU/offload paths may work only for specific runners and will be much slower.
 For install notes and wrapper examples, see the
 [Local Model Setup wiki](wiki/Local-Model-Setup.md).
 
-The browser app defaults to a `$10.00 USD` max-cost cap and leaves Max seconds blank,
-which means it plans the full source. Enter `10` for faster, cheaper tests.
+The browser app defaults to a `$10.00 USD` max-cost cap and leaves Duration at the
+full source length when the source is under 60 seconds. Longer sources are capped at
+60 seconds by default. Move the slider lower for faster, cheaper tests.
 
 ### Adding More Models
 

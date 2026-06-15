@@ -51,7 +51,7 @@ function EmptyPlan() {
       <div className="grid gap-3">
         {steps.map(([title, body], i) => (
           <div className="flex gap-3" key={title}>
-            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent-gradient text-xs font-extrabold text-night">{i + 1}</span>
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent-gradient text-xs font-extrabold text-white">{i + 1}</span>
             <div>
               <b className="block text-sm text-ink">{title}</b>
               <small className="text-xs leading-relaxed text-muted">{body}</small>
@@ -82,7 +82,7 @@ function PlanDetails({ plan, maxCost }: { plan: RunPlan; maxCost: number }) {
 
       {/* Cost hero + facts */}
       <div className="grid overflow-hidden rounded-xl border border-line md:grid-cols-[minmax(190px,0.8fr)_minmax(0,1.2fr)]">
-        <div className="relative overflow-hidden bg-accent-gradient p-5 text-night">
+        <div className="relative overflow-hidden bg-accent-gradient p-5 text-white">
           <span className="text-xs font-bold uppercase tracking-wider opacity-80">Estimated cost</span>
           <b className="mt-1 block text-[2.75rem] font-black leading-none">{money(plan.estimated_cost)}</b>
           <small className="mt-2 block text-xs font-semibold opacity-80">

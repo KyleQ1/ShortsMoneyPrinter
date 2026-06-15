@@ -1,4 +1,4 @@
-import type { ModelInfo, PreflightStatus, RemixRequest, RunPlan, StyleOption } from "./types";
+import type { ModelInfo, PreflightStatus, RemixRequest, RunPlan, StyleInput, StyleOption, UploadResult } from "./types";
 
 async function requestJson<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, options);
@@ -17,6 +17,42 @@ async function requestJson<T>(path: string, options?: RequestInit): Promise<T> {
 
 export function getStyles(): Promise<StyleOption[]> {
   return requestJson<StyleOption[]>("/api/styles");
+}
+
+export function saveStyle(body: StyleInput): Promise<StyleOption> {
+  return requestJson<StyleOption>("/api/styles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteStyle(key: string): Promise<void> {
+  await requestJson<{ deleted: string }>(`/api/styles/${encodeURIComponent(key)}`, {
+    method: "DELETE",
+  });
+}
+
+export function resetStyles(): Promise<StyleOption[]> {
+  return requestJson<StyleOption[]>("/api/styles/reset", {
+    method: "POST",
+  });
+}
+
+export function resetStyle(key: string): Promise<StyleOption> {
+  return requestJson<StyleOption>(`/api/styles/${encodeURIComponent(key)}/reset`, {
+    method: "POST",
+  });
+}
+
+export function uploadFile(kind: "video" | "image" | "audio", file: File): Promise<UploadResult> {
+  const body = new FormData();
+  body.append("kind", kind);
+  body.append("file", file);
+  return requestJson<UploadResult>("/api/uploads", {
+    method: "POST",
+    body,
+  });
 }
 
 export function getPreflight(): Promise<PreflightStatus> {

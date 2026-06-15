@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 import app.server as server
 import app.remix_runner as remix_runner
+from app.services import styles
 from app.remix_runner import (
     QUALITY_PROFILES,
     RemixProvider,
@@ -51,6 +52,26 @@ def _tiny_mp4(path: Path, seconds: float = 1.0) -> Path:
             "yuv420p",
             "-c:a",
             "aac",
+            str(path),
+        ],
+        check=True,
+    )
+    return path
+
+
+def _tiny_png(path: Path) -> Path:
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=teal:s=180x320:d=1",
+            "-frames:v",
+            "1",
             str(path),
         ],
         check=True,
@@ -124,6 +145,33 @@ def test_prompt_generation_is_deterministic():
     assert "Script/narration direction: fast Hindi narration" in directed
 
 
+def test_prompt_generation_can_use_ai_writer(monkeypatch):
+    calls = []
+
+    def fake_refine(prompt, *, api_key=None, model=None, endpoint=None):
+        calls.append((prompt, api_key, model, endpoint))
+        return f"rewritten: {prompt}"
+
+    monkeypatch.setattr(remix_runner.prompt_writer, "refine_prompt", fake_refine)
+
+    prompt = generate_prompt(
+        0,
+        0.0,
+        3.25,
+        "nursery-3d",
+        "make it playful",
+        enhance=True,
+        prompt_api_key="test-key",
+        prompt_model="test-model",
+    )
+
+    assert prompt.startswith("rewritten:")
+    assert calls
+    assert calls[0][1] == "test-key"
+    assert calls[0][2] == "test-model"
+    assert "User direction: make it playful" in calls[0][0]
+
+
 def test_dry_run_writes_plan_and_never_calls_provider(tmp_path):
     source = _tiny_mp4(tmp_path / "source.mp4")
     plan = create_plan(
@@ -157,6 +205,101 @@ def test_plan_missing_local_file_has_actionable_error(tmp_path):
     missing = tmp_path / "missing.mp4"
     with pytest.raises(FileNotFoundError, match="Source file not found"):
         create_plan(RemixRequest(source=str(missing)), runs_dir=tmp_path / "runs")
+
+
+def test_image_to_video_plan_uses_uploaded_image_and_aspect_override(tmp_path):
+    image = _tiny_png(tmp_path / "source.png")
+    plan = create_plan(
+        RemixRequest(
+            image_path=str(image),
+            quality="seedance-1.5-pro",
+            resolution="720p",
+            aspect_ratio="1:1",
+            max_total_seconds=8,
+        ),
+        runs_dir=tmp_path / "runs",
+    )
+
+    assert plan.is_image_to_video is True
+    assert plan.block_count == 1
+    assert plan.width == 960
+    assert plan.height == 960
+    assert plan.aspect_ratio == "1:1"
+    assert plan.resolution == "720p"
+    assert plan.duration == 8
+    assert plan.blocks[0].ref_video == ""
+    assert Path(plan.blocks[0].keyframe).exists()
+
+
+def test_video_plan_applies_resolution_and_aspect_override(tmp_path):
+    source = _tiny_mp4(tmp_path / "source.mp4")
+    plan = create_plan(
+        RemixRequest(
+            source=str(source),
+            quality="seedance-2.0-fast",
+            resolution="720p",
+            aspect_ratio="16:9",
+            max_total_seconds=1,
+        ),
+        runs_dir=tmp_path / "runs",
+    )
+
+    assert plan.resolution == "720p"
+    assert plan.aspect_ratio == "16:9"
+    assert plan.width == 1280
+    assert plan.height == 720
+    assert Path(plan.blocks[0].ref_video).exists()
+
+
+def test_audio_upload_mode_sets_audio_path_and_requires_file(tmp_path):
+    source = _tiny_mp4(tmp_path / "source.mp4")
+    uploaded = tmp_path / "audio.m4a"
+    uploaded.write_bytes(b"fake audio")
+
+    plan = create_plan(
+        RemixRequest(
+            source=str(source),
+            audio_mode="upload",
+            audio_upload=str(uploaded),
+            max_total_seconds=1,
+        ),
+        runs_dir=tmp_path / "runs",
+    )
+    assert plan.audio_mode == "upload"
+    assert plan.audio_path == str(uploaded)
+
+    with pytest.raises(remix_runner.UserFacingError, match="Upload-audio mode requires"):
+        create_plan(
+            RemixRequest(source=str(source), audio_mode="upload", max_total_seconds=1),
+            runs_dir=tmp_path / "runs-missing-audio",
+        )
+
+
+def test_styles_overlay_save_hide_and_reset(tmp_path, monkeypatch):
+    monkeypatch.setattr(styles, "STYLES_FILE", tmp_path / "styles.json")
+
+    saved = styles.save_style(
+        "Nursery 3D",
+        "custom nursery prompt",
+        key="nursery-3d",
+        match_reference=False,
+        kids=True,
+    )
+    assert saved.prompt == "custom nursery prompt"
+    assert styles.get("nursery-3d").match_reference is False
+    assert styles.to_dict(saved)["overridden"] is True
+
+    styles.delete_style("anime")
+    assert "anime" not in styles.keys()
+
+    custom = styles.save_style("My Custom Style", "custom prompt")
+    assert custom.key == "my-custom-style"
+    assert styles.get("my-custom-style").prompt == "custom prompt"
+
+    styles.reset_all()
+    assert "anime" in styles.keys()
+    assert "my-custom-style" not in styles.keys()
+    assert styles.get("nursery-3d").prompt != "custom nursery prompt"
 
 
 def test_youtube_shorts_download_retries_with_watch_url(monkeypatch):

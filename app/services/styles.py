@@ -16,7 +16,13 @@ animation styles for broader 13+ content.
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
+from pathlib import Path
+
+# User overrides + custom styles live here (gitignored). Built-ins are the defaults.
+STYLES_FILE = Path("storage/styles.json")
 
 
 @dataclass(frozen=True)
@@ -29,7 +35,7 @@ class Style:
 
 
 # Ordered registry. First match wins; `none` is the passthrough.
-STYLES: dict[str, Style] = {
+BUILTIN_STYLES: dict[str, Style] = {
     "none": Style(
         "none", "No style (passthrough)",
         "", True, False,
@@ -103,23 +109,150 @@ STYLES: dict[str, Style] = {
 DEFAULT_STYLE = "nursery-3d"
 
 
-def get(key: str) -> Style:
+# --- persistence overlay -----------------------------------------------------
+
+
+def _read_overlay() -> dict:
     try:
-        return STYLES[key]
+        data = json.loads(STYLES_FILE.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    data.setdefault("styles", {})
+    data.setdefault("hidden", [])
+    return data
+
+
+def _write_overlay(overlay: dict) -> None:
+    STYLES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = STYLES_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(overlay, indent=2), encoding="utf-8")
+    tmp.replace(STYLES_FILE)
+
+
+def _registry() -> dict[str, Style]:
+    """Built-in styles overlaid with the user's saved edits/customs, minus hidden keys."""
+    overlay = _read_overlay()
+    registry: dict[str, Style] = dict(BUILTIN_STYLES)
+    for key, item in overlay["styles"].items():
+        if not isinstance(item, dict):
+            continue
+        registry[key] = Style(
+            key=key,
+            label=str(item.get("label") or key),
+            prompt=str(item.get("prompt") or ""),
+            match_reference=bool(item.get("match_reference", True)),
+            kids=bool(item.get("kids", False)),
+        )
+    for key in overlay["hidden"]:
+        registry.pop(key, None)
+    return registry
+
+
+# --- read API ----------------------------------------------------------------
+
+
+def get(key: str) -> Style:
+    registry = _registry()
+    try:
+        return registry[key]
     except KeyError:
-        raise ValueError(
-            f"unknown style {key!r}; choices: {', '.join(STYLES)}"
-        ) from None
+        raise ValueError(f"unknown style {key!r}; choices: {', '.join(registry)}") from None
 
 
 def keys() -> list[str]:
-    return list(STYLES)
+    return list(_registry())
+
+
+def all_styles() -> list[Style]:
+    return list(_registry().values())
+
+
+def is_builtin(key: str) -> bool:
+    return key in BUILTIN_STYLES
+
+
+def is_overridden(key: str) -> bool:
+    return key in _read_overlay()["styles"]
+
+
+def to_dict(style: Style) -> dict:
+    return {
+        "key": style.key,
+        "label": style.label,
+        "prompt": style.prompt,
+        "match_reference": style.match_reference,
+        "kids": style.kids,
+        "builtin": is_builtin(style.key),
+        "custom": not is_builtin(style.key),
+        "overridden": is_overridden(style.key),
+    }
 
 
 def apply(base_prompt: str, key: str) -> str:
-    """Prepend the style fragment to the user's prompt (passthrough for 'none')."""
+    """Prepend the style fragment to the user's prompt (passthrough for an empty fragment)."""
     style = get(key)
     base = (base_prompt or "").strip()
     if not style.prompt:
         return base
     return f"{style.prompt} {base}".strip()
+
+
+# --- write API (save / edit / create / delete / reset) -----------------------
+
+
+_KEY_RE = re.compile(r"[^a-z0-9-]+")
+
+
+def slugify(label: str) -> str:
+    slug = _KEY_RE.sub("-", (label or "").strip().lower()).strip("-")
+    return slug or "style"
+
+
+def save_style(label: str, prompt: str, *, key: str | None = None,
+               match_reference: bool = True, kids: bool = False) -> Style:
+    label = (label or "").strip()
+    if not label:
+        raise ValueError("Style label is required.")
+    key = (key or slugify(label)).strip()
+    if not key:
+        raise ValueError("Style key is required.")
+    overlay = _read_overlay()
+    overlay["styles"][key] = {
+        "label": label,
+        "prompt": (prompt or "").strip(),
+        "match_reference": bool(match_reference),
+        "kids": bool(kids),
+    }
+    if key in overlay["hidden"]:
+        overlay["hidden"].remove(key)
+    _write_overlay(overlay)
+    return get(key)
+
+
+def delete_style(key: str) -> None:
+    if key == DEFAULT_STYLE:
+        raise ValueError("Cannot delete the default style.")
+    overlay = _read_overlay()
+    removed = overlay["styles"].pop(key, None)
+    if key in BUILTIN_STYLES:
+        if key not in overlay["hidden"]:
+            overlay["hidden"].append(key)  # built-ins are hidden, not erased
+    elif removed is None:
+        raise ValueError(f"unknown style {key!r}")
+    _write_overlay(overlay)
+
+
+def reset_style(key: str) -> Style:
+    """Drop a single built-in's override/hide, restoring its shipped default."""
+    overlay = _read_overlay()
+    overlay["styles"].pop(key, None)
+    if key in overlay["hidden"]:
+        overlay["hidden"].remove(key)
+    _write_overlay(overlay)
+    return get(key)
+
+
+def reset_all() -> None:
+    STYLES_FILE.unlink(missing_ok=True)

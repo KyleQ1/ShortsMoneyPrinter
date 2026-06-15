@@ -9,6 +9,7 @@ export function EnvironmentStatus({ status }: { status: PreflightStatus | null }
         ["Seedance2 cookie", status.seedance2_cookie, "Temporary direct Seedance test run"],
         ["Replicate token", status.replicate_token, "Cloud generation auth"],
         ["Replicate package", status.replicate_package, "Cloud generation SDK"],
+        ["Prompt key", status.prompt_api_key, "Optional AI prompt writer"],
       ]
     : [];
 
